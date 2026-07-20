@@ -15,7 +15,11 @@
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { FlatList, StyleSheet, Text, View } from 'react-native';
-import { KeyboardStickyView } from 'react-native-keyboard-controller';
+import {
+  KeyboardStickyView,
+  useReanimatedKeyboardAnimation,
+} from 'react-native-keyboard-controller';
+import Animated, { useAnimatedStyle } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { MessageBubble, groupsWithPrevious } from '@/components/message-bubble';
@@ -100,6 +104,16 @@ export default function ChatScreen() {
 
   const danger = info.mode === 'public';
 
+  // The composer sits above the keyboard via KeyboardStickyView, but that moves
+  // only the composer — the message list behind it stays full-height, so the
+  // keyboard covers the newest bubbles. This spacer, appended to the list and
+  // grown to the live keyboard height, lifts the content by exactly that much
+  // so the last message clears the keyboard and the floating composer together.
+  // `height` from keyboard-controller is the native IME inset animation; Math.abs
+  // guards the sign, which differs across versions.
+  const { height: keyboardHeight } = useReanimatedKeyboardAnimation();
+  const listSpacer = useAnimatedStyle(() => ({ height: Math.abs(keyboardHeight.value) }));
+
   return (
     <View style={{ flex: 1, backgroundColor: t.bg }}>
       <Stack.Screen options={{ title: info.title }} />
@@ -128,6 +142,9 @@ export default function ChatScreen() {
         ]}
         onContentSizeChange={() => listRef.current?.scrollToEnd({ animated: true })}
         keyboardDismissMode="interactive"
+        // Grows with the keyboard, so opening it scrolls the newest bubbles up
+        // above both the keyboard and the floating composer.
+        ListFooterComponent={<Animated.View style={listSpacer} />}
         ListEmptyComponent={
           <Empty
             title={emptyTitle(info)}
@@ -165,12 +182,9 @@ export default function ChatScreen() {
         </Text>
       )}
 
-      {/* KeyboardStickyView pins the composer to the top of the keyboard. It
-          reads the native IME inset animation directly, so unlike
-          KeyboardAvoidingView it is not thrown off by the edge-to-edge window
-          or the navigation header. `opened: insets.bottom` cancels the resting
-          safe-area padding once the keyboard covers the home indicator, so the
-          input sits flush on the keys rather than floating a gap above them. */}
+      {/* Pins the composer to the top of the keyboard. `opened: insets.bottom`
+          drops the resting safe-area padding once the keyboard covers the home
+          indicator, so the input sits flush on the keys. */}
       <KeyboardStickyView offset={{ closed: 0, opened: insets.bottom }}>
         <View
           style={[
@@ -179,9 +193,9 @@ export default function ChatScreen() {
               backgroundColor: t.bg,
               paddingBottom: insets.bottom || Spacing.lg,
               // In public broadcast the rule above the keyboard is red too. By
-              // the time the keyboard is up the warning band has scrolled out of
-              // the user's attention even though it is still on screen, and this
-              // is the one moment where being reminded still changes the outcome.
+              // the time the keyboard is up the warning band has scrolled off the
+              // user's attention even though it is still on screen, and this is
+              // the one moment where being reminded still changes the outcome.
               borderTopColor: danger ? t.tone.danger.fill : t.border,
               borderTopWidth: danger ? 2 : StyleSheet.hairlineWidth,
             },
