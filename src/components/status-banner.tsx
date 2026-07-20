@@ -97,6 +97,12 @@ export function StatusBanner({ status }: { status: MeshStatus }) {
   const { tone, state, headline, detail, searching } = describe(status);
   const c = t.tone[tone];
 
+  // Connected is the one settled, affirmative state — it earns a quieter, more
+  // resolved look than searching: a static glow around the dot and a toned
+  // hairline instead of the neutral border. Never carried by this alone; the
+  // word, the colour and the sentence still say "connected" without it.
+  const affirm = tone === 'ok';
+
   const carrying =
     status.carrying > 0
       ? `Carrying ${status.carrying} sealed ${
@@ -112,9 +118,16 @@ export function StatusBanner({ status }: { status: MeshStatus }) {
       accessibilityLabel={[state + '.', headline + '.', detail, carrying, status.lastError]
         .filter(Boolean)
         .join(' ')}
-      style={[styles.card, { backgroundColor: t.surface, borderColor: t.border }]}>
+      style={[
+        styles.card,
+        {
+          backgroundColor: t.surface,
+          borderColor: affirm ? c.edge : t.border,
+          borderWidth: affirm ? 1 : StyleSheet.hairlineWidth,
+        },
+      ]}>
       <View style={styles.head}>
-        <Beacon color={c.fg} active={searching} />
+        <Beacon color={c.fg} active={searching} affirm={affirm} />
         <Text style={[Type.label, { color: c.fg }]}>{state.toUpperCase()}</Text>
       </View>
 
@@ -141,7 +154,15 @@ export function StatusBanner({ status }: { status: MeshStatus }) {
  * implies it will finish; this can legitimately search for an hour in an empty
  * street, and the honest signal for that is "still listening", not "loading".
  */
-function Beacon({ color, active }: { color: string; active: boolean }) {
+function Beacon({
+  color,
+  active,
+  affirm,
+}: {
+  color: string;
+  active: boolean;
+  affirm?: boolean;
+}) {
   const motion = useMotion();
   const p = useSharedValue(0);
   const run = active && motion;
@@ -174,6 +195,10 @@ function Beacon({ color, active }: { color: string; active: boolean }) {
           <Animated.View style={[styles.ring, { borderColor: color }, ringB]} />
         </>
       )}
+      {/* Settled glow for a connection that has landed. Static, so reduced
+          motion leaves it exactly as-is — it is decoration on a state already
+          spelled out in words. */}
+      {affirm && !run && <View style={[styles.halo, { backgroundColor: color }]} />}
       <View style={[styles.dot, { backgroundColor: color }]} />
     </View>
   );
@@ -198,6 +223,14 @@ const styles = StyleSheet.create({
   head: { flexDirection: 'row', alignItems: 'center', gap: Spacing.md, height: 20 },
   beacon: { width: DOT, height: DOT, alignItems: 'center', justifyContent: 'center' },
   dot: { width: DOT, height: DOT, borderRadius: DOT / 2 },
+  halo: {
+    position: 'absolute',
+    width: DOT,
+    height: DOT,
+    borderRadius: DOT / 2,
+    opacity: 0.2,
+    transform: [{ scale: 2.4 }],
+  },
   ring: {
     position: 'absolute',
     width: DOT,

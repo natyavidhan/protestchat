@@ -95,7 +95,7 @@ export function MessageBubble({
         marginTop: joined ? 2 : Spacing.lg,
       }}>
       {!!senderName && (
-        <Text style={[Type.micro, { color: t.textMuted, marginBottom: 5, marginLeft: Spacing.md }]}>
+        <Text style={[Type.micro, { color: t.textMuted, marginBottom: 4, marginLeft: Spacing.md }]}>
           {senderName}
         </Text>
       )}
@@ -120,12 +120,15 @@ export function MessageBubble({
       {!!meta && (
         <Text
           // Muted and small on purpose: the timestamp is context, never the
-          // thing you are reading the screen for.
+          // thing you are reading the screen for. A notch below caption so it
+          // recedes further under the message it belongs to.
           style={[
             Type.caption,
             {
+              fontSize: 11,
+              lineHeight: 14,
               color: failed ? t.tone.danger.fg : t.textFaint,
-              marginTop: 5,
+              marginTop: 4,
               marginHorizontal: Spacing.xs,
             },
           ]}>

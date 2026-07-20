@@ -239,6 +239,7 @@ export function Row({
 }) {
   const t = useTheme();
   const hasUnread = unread > 0;
+  const hasMeta = !!tag || hasUnread;
   return (
     <Pressable
       accessibilityRole={onPress ? 'button' : undefined}
@@ -253,19 +254,16 @@ export function Row({
       ]}>
       {leading}
       <View style={{ flex: 1, gap: 3 }}>
-        <View style={styles.rowTitleLine}>
-          <Text
-            style={[
-              Type.bodyStrong,
-              // Unread pulls the title to full strength and bold; a read row sits
-              // one notch quieter, so the list scans as "these need me" first.
-              { color: t.text, flexShrink: 1, fontWeight: hasUnread ? '700' : '600' },
-            ]}
-            numberOfLines={1}>
-            {title}
-          </Text>
-          {tag}
-        </View>
+        <Text
+          style={[
+            Type.bodyStrong,
+            // Unread pulls the title to full strength and bold; a read row sits
+            // one notch quieter, so the list scans as "these need me" first.
+            { color: t.text, fontWeight: hasUnread ? '700' : '600' },
+          ]}
+          numberOfLines={1}>
+          {title}
+        </Text>
         {!!subtitle && (
           <Text
             style={[Type.caption, { color: hasUnread ? t.text : t.textMuted }]}
@@ -274,9 +272,19 @@ export function Row({
           </Text>
         )}
       </View>
-      {hasUnread && (
-        <View style={[styles.unread, { backgroundColor: t.accentFill }]}>
-          <Text style={[Type.micro, { color: t.onAccentFill }]}>{unread > 99 ? '99+' : unread}</Text>
+      {/* Tag and unread share the right edge, so they are stacked in one
+          right-aligned column rather than left to collide: the state pill on
+          top, the count beneath it. A row never has to choose between them. */}
+      {hasMeta && (
+        <View style={styles.rowMeta}>
+          {tag}
+          {hasUnread && (
+            <View style={[styles.unread, { backgroundColor: t.accentFill }]}>
+              <Text style={[Type.micro, { color: t.onAccentFill }]}>
+                {unread > 99 ? '99+' : unread}
+              </Text>
+            </View>
+          )}
         </View>
       )}
     </Pressable>
@@ -284,22 +292,51 @@ export function Row({
 }
 
 /**
- * A neutral monogram. Deliberately not colour-coded by identity: a per-person
- * hue would look like a trust signal, and nothing about a contact's colour
- * tells you whether you verified them.
+ * The leading tile for a list row. Every list gets one, so rows share a common
+ * left edge instead of some being indented by an avatar and others sitting
+ * flush against the card — which is what made the home screen's lists read as
+ * unrelated strips.
+ *
+ * Deliberately neutral, never colour-coded: a per-row hue would look like a
+ * trust signal, and nothing about a row's colour tells you whether the room
+ * behind it is private. The mark only says *what kind* of row this is — a
+ * person or group's initial, a channel's #, or the broadcast radiate mark. No
+ * padlock and no shield: two of these rooms are not private and a lock is a lie.
  */
-export function Monogram({ name }: { name: string }) {
+export function Leading({
+  kind,
+  name,
+}: {
+  kind: 'person' | 'group' | 'channel' | 'broadcast';
+  name?: string;
+}) {
   const t = useTheme();
-  const initial = name.trim().charAt(0).toUpperCase() || '?';
+  const initial = (name?.trim().charAt(0) ?? '').toUpperCase() || '?';
   return (
     <View
       // Decorative — the name is right beside it in text.
       accessibilityElementsHidden
       importantForAccessibility="no-hide-descendants"
       style={[styles.monogram, { backgroundColor: t.surfaceRaised, borderColor: t.border }]}>
-      <Text style={[Type.calloutStrong, { color: t.textMuted }]}>{initial}</Text>
+      {kind === 'broadcast' ? (
+        // A center dot inside a ring: "radiating outward" without an icon font,
+        // and pointedly not a signal-strength or lock glyph.
+        <View style={styles.radiate}>
+          <View style={[styles.radiateRing, { borderColor: t.textMuted }]} />
+          <View style={[styles.radiateDot, { backgroundColor: t.textMuted }]} />
+        </View>
+      ) : (
+        <Text style={[Type.calloutStrong, { color: t.textMuted }]}>
+          {kind === 'channel' ? '#' : initial}
+        </Text>
+      )}
     </View>
   );
+}
+
+/** Back-compat alias; a person's leading tile is just an initialled monogram. */
+export function Monogram({ name }: { name: string }) {
+  return <Leading kind="person" name={name} />;
 }
 
 // ---------------------------------------------------------------------------
@@ -403,7 +440,9 @@ export function SectionHeader({
       </Text>
       {!!action && !!onAction && (
         <Pressable
-          hitSlop={16}
+          // 20pt slop around a 16pt line clears the 52pt tap target the eyebrow
+          // itself is too short to provide.
+          hitSlop={20}
           onPress={onAction}
           accessibilityRole="button"
           accessibilityLabel={`${action} ${title.toLowerCase()}`}>
@@ -428,20 +467,35 @@ export function Empty({
   detail,
   action,
   onAction,
+  compact = false,
 }: {
   title: string;
   detail: string;
   action?: string;
   onAction?: () => void;
+  /**
+   * Lighter and shorter, for an empty state stacked among others (the home
+   * lists). Three full-size explanations in a row read as three essays; the
+   * compact form keeps every word but drops the weight so an empty app looks
+   * unstarted, not overwhelming. The standalone conversation empty stays full.
+   */
+  compact?: boolean;
 }) {
   const t = useTheme();
   return (
-    <View style={styles.empty}>
-      <Text style={[Type.heading, { color: t.text, textAlign: 'center' }]}>{title}</Text>
+    <View style={[styles.empty, compact && styles.emptyCompact]}>
+      <Text style={[compact ? Type.calloutStrong : Type.heading, { color: t.text, textAlign: 'center' }]}>
+        {title}
+      </Text>
       <Text
         style={[
-          Type.callout,
-          { color: t.textMuted, textAlign: 'center', maxWidth: 320, marginTop: Spacing.sm },
+          compact ? Type.caption : Type.callout,
+          {
+            color: t.textMuted,
+            textAlign: 'center',
+            maxWidth: compact ? 300 : 320,
+            marginTop: compact ? Spacing.xs : Spacing.sm,
+          },
         ]}>
         {detail}
       </Text>
@@ -450,7 +504,7 @@ export function Empty({
           title={action}
           variant="quiet"
           onPress={onAction}
-          style={{ marginTop: Spacing.sm }}
+          style={{ marginTop: compact ? Spacing.xs : Spacing.sm }}
         />
       )}
     </View>
@@ -506,11 +560,11 @@ const styles = StyleSheet.create({
     paddingHorizontal: Spacing.lg,
     paddingVertical: Spacing.md,
   },
-  rowTitleLine: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    gap: Spacing.sm,
+  // The right-hand meta column: state pill over unread count, both flushed to
+  // the row's right edge so they line up down a list instead of colliding.
+  rowMeta: {
+    alignItems: 'flex-end',
+    gap: Spacing.xs + 2,
   },
   unread: {
     minWidth: 22,
@@ -528,6 +582,15 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
+  radiate: { width: 20, height: 20, alignItems: 'center', justifyContent: 'center' },
+  radiateRing: {
+    position: 'absolute',
+    width: 18,
+    height: 18,
+    borderRadius: 9,
+    borderWidth: 1.5,
+  },
+  radiateDot: { width: 6, height: 6, borderRadius: 3 },
   tag: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -548,9 +611,12 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    minHeight: TAP_TARGET - 12,
-    marginTop: Spacing.xl,
-    marginBottom: Spacing.sm,
+    // The eyebrow hugs the card beneath it (small marginBottom) while a wide
+    // gap opens above, so a header reads as belonging to the list it labels
+    // rather than floating equidistant between two sections.
+    minHeight: 24,
+    marginTop: Spacing.xxl,
+    marginBottom: Spacing.xs + 2,
     paddingHorizontal: Spacing.xs,
   },
   empty: {
@@ -560,4 +626,5 @@ const styles = StyleSheet.create({
     paddingHorizontal: Spacing.sm,
     alignItems: 'center',
   },
+  emptyCompact: { paddingVertical: Spacing.sm },
 });

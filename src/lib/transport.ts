@@ -132,8 +132,20 @@ class BleTransport implements Transport {
       // "Bluetooth is off" and "you denied the permission" need completely
       // different instructions, so the native layer keeps them distinct and the
       // message it hands up is already the one to show a user.
+      //
+      // 'unknown' and 'resetting' are transient — the radio reports 'unknown'
+      // for a moment at startup before it has read its own state, and briefly
+      // 'resetting' when it cycles. Neither is something a user can act on, so
+      // surfacing them just pins a scary line ("Bluetooth state is not known
+      // yet") on the screen that never clears, even once connected. Only the
+      // genuinely actionable bad states are shown; reaching 'ready' clears
+      // whatever was shown (empty string is the clear signal — see mesh.ts).
       n.addStateChangeListener((s: { state: string; message: string }) => {
-        if (s.state !== 'ready' && s.message) this.emit('error', s.message);
+        if (s.state === 'ready') {
+          this.emit('error', '');
+        } else if (s.state === 'poweredOff' || s.state === 'unauthorized' || s.state === 'unsupported') {
+          this.emit('error', s.message);
+        }
       }),
       n.addErrorListener((p: { message: string }) => this.emit('error', p.message)),
     ];

@@ -20,7 +20,7 @@ import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { StatusBanner } from '@/components/status-banner';
-import { Button, Card, Empty, List, Monogram, Row, Screen, SectionHeader, Tag } from '@/components/ui';
+import { Button, Card, Empty, Leading, List, Row, Screen, SectionHeader, Tag } from '@/components/ui';
 import { Spacing, Type } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 import { useApp } from '@/lib/app-state';
@@ -50,7 +50,7 @@ export default function HomeScreen() {
       <View style={styles.topBar}>
         <Text style={[Type.label, { color: t.textMuted }]}>PROTESTCHAT</Text>
         <Pressable
-          hitSlop={16}
+          hitSlop={20}
           accessibilityRole="button"
           accessibilityLabel="Settings"
           onPress={() => router.push('/settings')}>
@@ -73,6 +73,7 @@ export default function HomeScreen() {
               subtitle={last.get('#public')?.lastText ?? 'Crowd warnings only. Never names or plans.'}
               unread={last.get('#public')?.unread ?? 0}
               onPress={() => open('#public')}
+              leading={<Leading kind="broadcast" />}
               accessibilityLabel="Everyone nearby. Not private — anyone in range can read this."
               // The tag repeats what the chat screen's red band will say. Saying
               // it twice is cheap; discovering it after sending is not.
@@ -86,6 +87,7 @@ export default function HomeScreen() {
       {joined.length === 0 ? (
         <Card>
           <Empty
+            compact
             title="No channels yet"
             detail="A channel is a name and a passphrase, nothing else. Anyone you tell the passphrase to can read everything in it — including what was said before they arrived."
             action="Join a channel"
@@ -101,6 +103,7 @@ export default function HomeScreen() {
               subtitle={last.get(`#${c.id}`)?.lastText ?? 'No messages yet'}
               unread={last.get(`#${c.id}`)?.unread ?? 0}
               onPress={() => open(`#${c.id}`)}
+              leading={<Leading kind="channel" />}
               tag={<Tag tone="caution" label="Shared key" />}
             />
           ))}
@@ -111,6 +114,7 @@ export default function HomeScreen() {
       {groups.length === 0 ? (
         <Card>
           <Empty
+            compact
             title="No groups yet"
             detail="A group is encrypted separately to every person you add, so only they can read it. There is no shared key to leak."
             action="Make a group"
@@ -129,6 +133,7 @@ export default function HomeScreen() {
               }
               onPress={() => open(`~${g.id}`)}
               unread={last.get(`~${g.id}`)?.unread ?? 0}
+              leading={<Leading kind="group" name={g.name} />}
               tag={<Tag tone="ok" label="Private" />}
             />
           ))}
@@ -139,6 +144,7 @@ export default function HomeScreen() {
       {contacts.length === 0 ? (
         <Card>
           <Empty
+            compact
             title={ready ? 'Nobody added yet' : 'Starting up…'}
             detail="Stand next to someone and swap contact codes. It takes about ten seconds, and being in the same place is the whole reason it protects you — there is no server here to vouch for anyone."
             action={ready ? 'Add a person' : undefined}
@@ -154,7 +160,7 @@ export default function HomeScreen() {
               subtitle={last.get(c.publicId)?.lastText ?? 'No messages yet'}
               unread={last.get(c.publicId)?.unread ?? 0}
               onPress={() => open(c.publicId)}
-              leading={<Monogram name={c.name} />}
+              leading={<Leading kind="person" name={c.name} />}
               accessibilityLabel={`${c.name}. ${c.verified ? 'Verified' : 'Not verified'}.`}
               tag={
                 <Tag tone={c.verified ? 'ok' : 'caution'} label={c.verified ? 'Verified' : 'Unverified'} />

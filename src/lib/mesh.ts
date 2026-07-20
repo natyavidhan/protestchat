@@ -151,7 +151,9 @@ export class MeshEngine {
       }),
       this.transport.on('payload', (peerId, b64) => void this.ingest(peerId, b64)),
       this.transport.on('error', (message) => {
-        this.lastError = message;
+        // An empty message is the transport's "clear the error" signal, e.g. the
+        // radio reaching 'ready' after a transient startup state.
+        this.lastError = message || null;
         this.emit();
       }),
     ];
