@@ -14,12 +14,14 @@
 
 import { Stack } from 'expo-router';
 import { useState } from 'react';
-import { Alert, StyleSheet, Switch, Text, View } from 'react-native';
+import { Alert, Linking, Pressable, StyleSheet, Switch, Text, View } from 'react-native';
 
 import { Bullets, Button, Card, Field, Input, Notice, Screen, Tag } from '@/components/ui';
 import { Spacing, TAP_TARGET, Type } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 import { useApp } from '@/lib/app-state';
+
+const REPO_URL = 'https://github.com/ni5arga/protestchat';
 
 const LIMITATIONS = [
   'Your phone being taken while unlocked. Anyone holding it reads everything.',
@@ -108,6 +110,22 @@ export default function SettingsScreen() {
           you were present and transmitting.
         </Text>
       </View>
+
+      {/* Open source is a safety claim here, not a badge: the reason to trust
+          this app is that anyone can read exactly what it does. So the source
+          link is a first-class, tappable part of the screen. */}
+      <Pressable
+        accessibilityRole="link"
+        accessibilityLabel="100 percent open source. Opens the source code on GitHub."
+        onPress={() => void Linking.openURL(REPO_URL)}
+        style={({ pressed }) => [styles.footer, { opacity: pressed ? 0.6 : 1 }]}>
+        <Text style={[Type.calloutStrong, { color: t.text, textAlign: 'center' }]}>
+          100% open source
+        </Text>
+        <Text style={[Type.caption, { color: t.accent, textAlign: 'center' }]}>
+          github.com/ni5arga/protestchat
+        </Text>
+      </Pressable>
     </Screen>
   );
 }
@@ -123,5 +141,12 @@ const styles = StyleSheet.create({
     gap: Spacing.lg,
     paddingTop: Spacing.xl,
     borderTopWidth: StyleSheet.hairlineWidth,
+  },
+  footer: {
+    minHeight: TAP_TARGET,
+    gap: Spacing.xs,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: Spacing.lg,
   },
 });
