@@ -15,7 +15,7 @@
  *     stress, possibly while moving.
  */
 
-import { forwardRef, type ReactNode } from 'react';
+import { Children, forwardRef, type ReactNode } from 'react';
 import {
   Pressable,
   ScrollView,
@@ -210,14 +210,9 @@ export function List({ children }: { children: ReactNode }) {
 
   return (
     <View style={[styles.list, { backgroundColor: t.surface, borderColor: t.border }]}>
-      {items.map((child, i) => (
-        // eslint-disable-next-line react/no-array-index-key
-        <View key={i}>
-          {i > 0 && (
-            <View
-              style={[styles.sep, { backgroundColor: t.border, marginLeft: Spacing.lg }]}
-            />
-          )}
+      {Children.toArray(items).map((child, i) => (
+        <View key={`item-${i}`}>
+          {i > 0 && <View style={[styles.sep, { backgroundColor: t.border }]} />}
           {child}
         </View>
       ))}
@@ -480,7 +475,9 @@ const styles = StyleSheet.create({
     borderWidth: StyleSheet.hairlineWidth,
     overflow: 'hidden',
   },
-  sep: { height: StyleSheet.hairlineWidth },
+  // Inset to the row's text column, so a list reads as one block rather than
+  // as a stack of unrelated strips.
+  sep: { height: StyleSheet.hairlineWidth, marginLeft: Spacing.lg },
   row: {
     minHeight: TAP_TARGET + 8,
     flexDirection: 'row',

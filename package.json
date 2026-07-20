@@ -58,5 +58,7 @@
     "typecheck": "tsc --noEmit && tsc --noEmit -p tsconfig.test.json",
     "doctor": "bash scripts/doctor.sh"
   },
-  "private": true
+  "private": true,
+  "license": "MIT",
+  "description": "Off-grid encrypted messaging over Bluetooth mesh, for internet shutdowns and jammed protests."
 }

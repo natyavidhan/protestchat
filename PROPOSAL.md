@@ -73,7 +73,7 @@ Honest question. An app store listing is a chokepoint and a "possession = intent
 
 ## Ground rules
 
-- **AGPL, public repo from commit one.** Closed-source security software for protesters is not a thing I'm willing to ship.
+- **MIT, public repo from commit one.** Permissive on purpose — fork it, rename it, ship it to people who need it without asking me. Reach matters more here than control.
 - **No accounts, no phone numbers, no server.** Nothing to subpoena, nothing to seize.
 - Threat model written down *before* the crypto, and if a security researcher wants to break it, I'll take the finding and the credit split.
 - Ships with an honest limitations section. "May not protect you against a state adversary" printed in the app, not buried in a README.

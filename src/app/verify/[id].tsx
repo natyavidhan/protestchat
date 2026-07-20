@@ -7,12 +7,17 @@
  *
  * Written for someone who has never heard the phrase "man in the middle" and
  * should not have to.
+ *
+ * The digits get the largest type in the app and sit in three short rows,
+ * because the actual physical act here is two people holding two phones at
+ * arm's length reading numbers off each other's screens. A single fifteen-digit
+ * run is the layout most likely to make someone skim, agree, and be wrong.
  */
 
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
-import { ScrollView, StyleSheet, Text, View } from 'react-native';
+import { StyleSheet, Text, View } from 'react-native';
 
-import { Button, Card } from '@/components/ui';
+import { Button, Notice, Screen, Tag } from '@/components/ui';
 import { Fonts, Radius, Spacing, Type } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 import { useApp } from '@/lib/app-state';
@@ -26,46 +31,59 @@ export default function VerifyScreen() {
   const { contacts, safetyNumberFor, verifyContact } = useApp();
   const contact = contacts.find((c) => c.publicId === peerId);
   const digits = safetyNumberFor(peerId);
+  const rows = digits ? digits.split(' ') : [];
 
   return (
-    <ScrollView
-      style={{ backgroundColor: t.bg }}
-      contentContainerStyle={{ padding: Spacing.lg, gap: Spacing.lg }}>
+    <Screen contentStyle={{ gap: Spacing.xl }}>
       <Stack.Screen options={{ title: contact?.name ?? 'Verify' }} />
 
-      <Card style={{ gap: Spacing.lg }}>
-        <Text style={[Type.title, { color: t.text }]}>Check these numbers together</Text>
+      <View style={{ gap: Spacing.md }}>
+        <Text style={[Type.hero, { color: t.text }]}>Check these numbers together</Text>
         <Text style={[Type.body, { color: t.textMuted }]}>
-          Hold your phones side by side. If both screens show the same numbers, your messages can
-          only be read by the two of you.
+          Hold your phones side by side. If both screens show the same fifteen digits, your
+          messages can only be read by the two of you.
         </Text>
+      </View>
 
-        <View style={[styles.digits, { backgroundColor: t.surfaceRaised }]}>
-          <Text
-            selectable
-            style={[styles.digitText, { color: t.text }]}
-            accessibilityLabel={digits?.split('').join(' ') ?? ''}>
-            {digits ?? '—'}
-          </Text>
-        </View>
+      <View style={[styles.plate, { backgroundColor: t.surface, borderColor: t.border }]}>
+        {rows.length > 0 ? (
+          rows.map((row, i) => (
+            <Text
+              key={`${row}-${i}`}
+              selectable
+              // Read out digit by digit rather than as "twelve thousand…",
+              // which is how a screen-reader user has to compare them aloud.
+              accessibilityLabel={row.split('').join(' ')}
+              style={[styles.digits, { color: t.text }]}>
+              {row}
+            </Text>
+          ))
+        ) : (
+          <Text style={[styles.digits, { color: t.textMuted }]}>—</Text>
+        )}
+      </View>
 
-        <Text style={[Type.caption, { color: t.textFaint }]}>
-          Do this in person. Numbers read out over a phone call or sent in another app can be
-          faked by whoever controls that channel.
+      <Notice tone="caution">
+        <Text style={[Type.callout, { color: t.text }]}>
+          Do this in person. Numbers read out over a phone call, or sent in another app, can be
+          faked by whoever controls that call or that app.
         </Text>
-      </Card>
+      </Notice>
 
       {contact?.verified ? (
-        <Card style={{ gap: Spacing.md }}>
-          <Text style={[Type.bodyStrong, { color: t.green }]}>Marked as verified</Text>
+        <View style={{ gap: Spacing.lg }}>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: Spacing.md }}>
+            <Tag tone="ok" label="Verified" />
+            <Text style={[Type.callout, { color: t.textMuted, flex: 1 }]}>
+              You marked this person as checked.
+            </Text>
+          </View>
           <Button
             title="Undo"
             variant="secondary"
-            onPress={async () => {
-              await verifyContact(peerId, false);
-            }}
+            onPress={() => void verifyContact(peerId, false)}
           />
-        </Card>
+        </View>
       ) : (
         <View style={{ gap: Spacing.md }}>
           <Button
@@ -75,19 +93,29 @@ export default function VerifyScreen() {
               router.back();
             }}
           />
+          {/* Destructive styling on "they do not match" is correct: if the
+              digits differ, someone is sitting between the two of you, and the
+              calm-looking option is the dangerous one. */}
           <Button title="They do not match" variant="danger" onPress={() => router.back()} />
         </View>
       )}
-    </ScrollView>
+    </Screen>
   );
 }
 
 const styles = StyleSheet.create({
-  digits: { borderRadius: Radius.md, paddingVertical: Spacing.xl, paddingHorizontal: Spacing.lg },
-  digitText: {
+  plate: {
+    borderRadius: Radius.xl,
+    borderWidth: StyleSheet.hairlineWidth,
+    paddingVertical: Spacing.xl,
+    paddingHorizontal: Spacing.lg,
+    gap: Spacing.sm,
+  },
+  digits: {
     fontFamily: Fonts.mono,
-    fontSize: 28,
-    letterSpacing: 3,
+    fontSize: 40,
+    lineHeight: 48,
+    letterSpacing: 6,
     textAlign: 'center',
     fontVariant: ['tabular-nums'],
   },

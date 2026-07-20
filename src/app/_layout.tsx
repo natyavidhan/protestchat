@@ -1,36 +1,55 @@
 import { Stack } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
-import { useColorScheme } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 
-import { Colors } from '@/constants/theme';
+import { Colors, Type } from '@/constants/theme';
+import { useIsDark } from '@/hooks/use-theme';
 import { AppProvider } from '@/lib/app-state';
 
 export default function RootLayout() {
-  const scheme = useColorScheme();
-  const t = scheme === 'light' ? Colors.light : Colors.dark;
+  const isDark = useIsDark();
+  const t = isDark ? Colors.dark : Colors.light;
 
   return (
     <SafeAreaProvider>
       <AppProvider>
-        <StatusBar style={scheme === 'light' ? 'dark' : 'light'} />
+        <StatusBar style={isDark ? 'light' : 'dark'} />
         <Stack
           screenOptions={{
             headerStyle: { backgroundColor: t.bg },
-            headerTintColor: t.text,
-            headerTitleStyle: { fontWeight: '700' },
+            headerTintColor: t.accent,
+            headerTitleStyle: {
+              color: t.text,
+              fontSize: Type.heading.fontSize,
+              fontWeight: Type.heading.fontWeight,
+            },
+            // No hairline under the header. The one horizontal rule that matters
+            // on a chat screen is the bottom of the mode warning, and a second
+            // rule directly above it dilutes that.
             headerShadowVisible: false,
             contentStyle: { backgroundColor: t.bg },
+            // Calm and fast. The default push is already restrained; the point
+            // here is that nothing anywhere in this app slides in playfully.
+            animation: 'slide_from_right',
+            animationDuration: 220,
           }}>
-          <Stack.Screen name="index" options={{ title: 'Nearby' }} />
+          {/* Home draws its own header so the status banner can be the first
+              thing on the screen rather than the second. */}
+          <Stack.Screen name="index" options={{ headerShown: false }} />
           <Stack.Screen name="chat/[id]" options={{ title: '' }} />
-          <Stack.Screen name="add" options={{ title: 'Add a person', presentation: 'modal' }} />
+          <Stack.Screen
+            name="add"
+            options={{ title: 'Add a person', presentation: 'modal', animation: 'slide_from_bottom' }}
+          />
           <Stack.Screen name="verify/[id]" options={{ title: 'Verify' }} />
           <Stack.Screen
             name="join-channel"
-            options={{ title: 'Join a channel', presentation: 'modal' }}
+            options={{ title: 'Join a channel', presentation: 'modal', animation: 'slide_from_bottom' }}
           />
-          <Stack.Screen name="new-group" options={{ title: 'New group', presentation: 'modal' }} />
+          <Stack.Screen
+            name="new-group"
+            options={{ title: 'New group', presentation: 'modal', animation: 'slide_from_bottom' }}
+          />
           <Stack.Screen name="settings" options={{ title: 'Settings' }} />
         </Stack>
       </AppProvider>

@@ -5,20 +5,29 @@
  * directory, so the only thing that establishes who someone is, is the two of
  * you being in the same place and one phone reading the other's screen.
  *
- * Which means it has to be fast and impossible to get wrong. Show a QR code,
- * point a camera at it, done. The typed-code path exists only as a fallback for
- * a broken camera or a denied permission, and it is deliberately secondary.
+ * So it is given the weight of a ritual rather than the weight of a form: one
+ * thing on the screen at a time, the code presented large on a plaque, and the
+ * reason the in-person part matters stated in full sentences instead of a hint.
+ * The typed-code path exists only for a broken camera or a denied permission,
+ * and stays visually secondary because a code that arrived over some other app
+ * is a code that other app could have swapped.
  */
 
 import { CameraView, useCameraPermissions } from 'expo-camera';
 import * as Clipboard from 'expo-clipboard';
 import { useRouter } from 'expo-router';
 import { useRef, useState } from 'react';
-import { ScrollView, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
+import {
+  Pressable,
+  StyleSheet,
+  Text,
+  View,
+  useWindowDimensions,
+} from 'react-native';
 import QRCode from 'react-native-qrcode-svg';
 
-import { Button, Card, Input } from '@/components/ui';
-import { Radius, Spacing, Type } from '@/constants/theme';
+import { Button, Card, Field, Input, Screen } from '@/components/ui';
+import { Radius, Spacing, TAP_TARGET, Type } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 import { useApp } from '@/lib/app-state';
 
@@ -38,7 +47,7 @@ export default function AddScreen() {
   const handled = useRef(false);
 
   const myCode = identity ? `${QR_PREFIX}${identity.publicId}` : '';
-  const qrSize = Math.min(width - Spacing.lg * 6, 260);
+  const qrSize = Math.min(width - Spacing.lg * 2 - Spacing.xl * 2, 268);
 
   const accept = async (raw: string) => {
     const value = raw.trim().replace(QR_PREFIX, '');
@@ -52,122 +61,231 @@ export default function AddScreen() {
   };
 
   return (
-    <ScrollView
-      style={{ backgroundColor: t.bg }}
-      contentContainerStyle={{ padding: Spacing.lg, gap: Spacing.lg }}
-      keyboardShouldPersistTaps="handled">
-      <View style={[styles.toggle, { backgroundColor: t.surface, borderColor: t.border }]}>
-        <Toggle label="My code" active={mode === 'show'} onPress={() => setMode('show')} />
-        <Toggle
-          label="Scan theirs"
-          active={mode === 'scan'}
-          onPress={() => {
+    <Screen contentStyle={{ gap: Spacing.xl }}>
+      <Segmented
+        value={mode}
+        onChange={(next) => {
+          setMode(next);
+          if (next === 'scan') {
             handled.current = false;
-            setMode('scan');
             if (!permission?.granted) void requestPermission();
-          }}
-        />
-      </View>
+          }
+        }}
+      />
 
       {mode === 'show' ? (
-        <Card style={{ alignItems: 'center', gap: Spacing.lg }}>
-          <Text style={[Type.title, { color: t.text }]}>{displayName}</Text>
-          <View style={styles.qrFrame}>
+        <View style={{ alignItems: 'center', gap: Spacing.lg }}>
+          <Text style={[Type.label, { color: t.textMuted }]}>YOUR CODE</Text>
+          <Text style={[Type.hero, { color: t.text }]} numberOfLines={1}>
+            {displayName}
+          </Text>
+
+          <View style={styles.plaque}>
             {!!myCode && (
-              // Always light-on-white regardless of theme: a dark-mode QR code
-              // is a QR code that half of scanners refuse to read.
+              // Always dark-on-white regardless of theme: a dark-mode QR code is
+              // a QR code that half of scanners refuse to read.
               <QRCode value={myCode} size={qrSize} backgroundColor="#FFFFFF" color="#000000" />
             )}
           </View>
-          <Text style={[Type.body, { color: t.textMuted, textAlign: 'center' }]}>
-            Let the other person scan this. Do it standing next to them — that is what makes it
-            safe.
+
+          <Text style={[Type.body, { color: t.text, textAlign: 'center', maxWidth: 340 }]}>
+            Let the other person scan this while you are standing next to each other.
           </Text>
+          <Text style={[Type.callout, { color: t.textMuted, textAlign: 'center', maxWidth: 340 }]}>
+            Being in the same place is what makes it safe. Nothing here checks who anyone is —
+            you do, by being there.
+          </Text>
+
           <Button
             title="Copy code instead"
-            variant="secondary"
-            onPress={() => Clipboard.setStringAsync(myCode)}
+            variant="quiet"
+            onPress={() => void Clipboard.setStringAsync(myCode)}
           />
-        </Card>
+        </View>
       ) : (
-        <Card style={{ gap: Spacing.lg, padding: Spacing.md }}>
-          <View style={[styles.camera, { borderColor: t.border }]}>
+        <View style={{ gap: Spacing.lg }}>
+          <View style={[styles.viewfinder, { backgroundColor: t.surfaceSunken }]}>
             {permission?.granted ? (
-              <CameraView
-                style={StyleSheet.absoluteFill}
-                barcodeScannerSettings={{ barcodeTypes: ['qr'] }}
-                onBarcodeScanned={({ data }) => {
-                  // The camera fires continuously; without this latch a single
-                  // code adds the same contact dozens of times.
-                  if (handled.current || !data.startsWith(QR_PREFIX)) return;
-                  handled.current = true;
-                  void accept(data);
-                }}
-              />
+              <>
+                <CameraView
+                  style={StyleSheet.absoluteFill}
+                  barcodeScannerSettings={{ barcodeTypes: ['qr'] }}
+                  onBarcodeScanned={({ data }) => {
+                    // The camera fires continuously; without this latch a single
+                    // code adds the same contact dozens of times.
+                    if (handled.current || !data.startsWith(QR_PREFIX)) return;
+                    handled.current = true;
+                    void accept(data);
+                  }}
+                />
+                <Corners color={t.accent} />
+              </>
             ) : (
-              <View style={styles.cameraFallback}>
-                <Text style={[Type.body, { color: t.textMuted, textAlign: 'center' }]}>
-                  Camera access is off. You can still paste their code below.
+              <View style={styles.fallback}>
+                <Text style={[Type.body, { color: t.text, textAlign: 'center' }]}>
+                  Camera access is off
+                </Text>
+                <Text
+                  style={[
+                    Type.callout,
+                    { color: t.textMuted, textAlign: 'center', marginTop: Spacing.sm },
+                  ]}>
+                  You can still paste their code below, but only do that if you got it from them
+                  in person.
                 </Text>
               </View>
             )}
           </View>
-        </Card>
+          <Text style={[Type.body, { color: t.text, textAlign: 'center' }]}>
+            Point this at the other phone’s code.
+          </Text>
+        </View>
       )}
 
       <Card style={{ gap: Spacing.md }}>
-        <Text style={[Type.label, { color: t.textMuted }]}>OR PASTE THEIR CODE</Text>
-        <Input
-          value={typed}
-          onChangeText={(v) => {
-            setTyped(v);
-            setError(null);
-          }}
-          placeholder="protestchat:…"
-          multiline
-          style={{ minHeight: 88 }}
+        <Field
+          label="Or paste their code"
+          hint="A code that reached you through another app could have been swapped on the way. Prefer the camera.">
+          <Input
+            value={typed}
+            onChangeText={(v) => {
+              setTyped(v);
+              setError(null);
+            }}
+            placeholder="protestchat:…"
+            multiline
+            style={{ minHeight: 84 }}
+          />
+        </Field>
+        {!!error && (
+          <Text accessibilityRole="alert" style={[Type.caption, { color: t.tone.danger.fg }]}>
+            {error}
+          </Text>
+        )}
+        <Button
+          title="Add person"
+          variant="secondary"
+          onPress={() => void accept(typed)}
+          disabled={!typed.trim()}
         />
-        {!!error && <Text style={[Type.caption, { color: t.red }]}>{error}</Text>}
-        <Button title="Add person" onPress={() => accept(typed)} disabled={!typed.trim()} />
       </Card>
-    </ScrollView>
+    </Screen>
   );
 }
 
-function Toggle({
-  label,
-  active,
-  onPress,
+/** Two-way switch. Sized to the tap target because this is used one-handed. */
+function Segmented({
+  value,
+  onChange,
 }: {
-  label: string;
-  active: boolean;
-  onPress: () => void;
+  value: 'show' | 'scan';
+  onChange: (v: 'show' | 'scan') => void;
 }) {
   const t = useTheme();
+  const options: { key: 'show' | 'scan'; label: string }[] = [
+    { key: 'show', label: 'My code' },
+    { key: 'scan', label: 'Scan theirs' },
+  ];
+
   return (
-    <Button
-      title={label}
-      variant={active ? 'primary' : 'secondary'}
-      onPress={onPress}
-      style={{ flex: 1, backgroundColor: active ? t.blue : 'transparent' }}
-    />
+    <View style={[styles.segmented, { backgroundColor: t.surface, borderColor: t.border }]}>
+      {options.map((o) => {
+        const on = value === o.key;
+        return (
+          <Pressable
+            key={o.key}
+            accessibilityRole="tab"
+            accessibilityState={{ selected: on }}
+            accessibilityLabel={o.label}
+            onPress={() => onChange(o.key)}
+            style={({ pressed }) => [
+              styles.segment,
+              {
+                backgroundColor: on ? t.accentFill : 'transparent',
+                opacity: pressed ? 0.8 : 1,
+              },
+            ]}>
+            <Text style={[Type.bodyStrong, { color: on ? t.onAccentFill : t.textMuted }]}>
+              {o.label}
+            </Text>
+          </Pressable>
+        );
+      })}
+    </View>
   );
 }
 
+/**
+ * Corner brackets rather than a full outline. They frame the target without
+ * covering any of the code, and they say "aim" in a way a plain square does not.
+ */
+function Corners({ color }: { color: string }) {
+  return (
+    <View pointerEvents="none" style={StyleSheet.absoluteFill}>
+      <View style={[styles.corner, styles.tl, { borderColor: color }]} />
+      <View style={[styles.corner, styles.tr, { borderColor: color }]} />
+      <View style={[styles.corner, styles.bl, { borderColor: color }]} />
+      <View style={[styles.corner, styles.br, { borderColor: color }]} />
+    </View>
+  );
+}
+
+const B = 3;
+const C = 34;
+
 const styles = StyleSheet.create({
-  toggle: {
+  segmented: {
     flexDirection: 'row',
     gap: Spacing.xs,
     padding: Spacing.xs,
-    borderRadius: Radius.md,
+    borderRadius: Radius.md + Spacing.xs,
     borderWidth: StyleSheet.hairlineWidth,
   },
-  qrFrame: { padding: Spacing.lg, backgroundColor: '#FFFFFF', borderRadius: Radius.md },
-  camera: {
-    aspectRatio: 1,
+  segment: {
+    flex: 1,
+    minHeight: TAP_TARGET - Spacing.sm,
+    alignItems: 'center',
+    justifyContent: 'center',
     borderRadius: Radius.md,
-    borderWidth: StyleSheet.hairlineWidth,
+  },
+  plaque: {
+    padding: Spacing.xl,
+    backgroundColor: '#FFFFFF',
+    borderRadius: Radius.xl,
+  },
+  viewfinder: {
+    aspectRatio: 1,
+    borderRadius: Radius.xl,
     overflow: 'hidden',
   },
-  cameraFallback: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: Spacing.xl },
+  fallback: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: Spacing.xl },
+  corner: { position: 'absolute', width: C, height: C },
+  tl: {
+    top: Spacing.lg,
+    left: Spacing.lg,
+    borderTopWidth: B,
+    borderLeftWidth: B,
+    borderTopLeftRadius: Radius.md,
+  },
+  tr: {
+    top: Spacing.lg,
+    right: Spacing.lg,
+    borderTopWidth: B,
+    borderRightWidth: B,
+    borderTopRightRadius: Radius.md,
+  },
+  bl: {
+    bottom: Spacing.lg,
+    left: Spacing.lg,
+    borderBottomWidth: B,
+    borderLeftWidth: B,
+    borderBottomLeftRadius: Radius.md,
+  },
+  br: {
+    bottom: Spacing.lg,
+    right: Spacing.lg,
+    borderBottomWidth: B,
+    borderRightWidth: B,
+    borderBottomRightRadius: Radius.md,
+  },
 });

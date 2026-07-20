@@ -4,18 +4,23 @@
  * Answers two questions and nothing else: "is it working?" and "who can I talk
  * to?" Anything that is not one of those two answers belongs on another screen.
  *
- * Ordering is deliberate. Public broadcast sits at the top because it is the
- * thing someone reaches for in an emergency, and it carries a permanent red
- * label so that convenience never reads as safety.
+ * The status banner takes the top of the screen because in a jammed square that
+ * first question is genuinely urgent and the second one is not.
+ *
+ * Ordering below it is deliberate. Public broadcast sits first because it is
+ * what someone reaches for in an emergency, and it carries a permanent
+ * NOT PRIVATE tag so that being first never reads as being safe. The list of
+ * people you have actually verified sits last because reaching it should
+ * require a small, deliberate scroll rather than a panicked thumb.
  */
 
-import { Link, useFocusEffect, useRouter } from 'expo-router';
+import { useFocusEffect, useRouter } from 'expo-router';
 import { useCallback } from 'react';
-import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { StatusBanner } from '@/components/status-banner';
-import { Button, Card, Empty, Row } from '@/components/ui';
+import { Button, Card, Empty, List, Monogram, Row, Screen, SectionHeader, Tag } from '@/components/ui';
 import { Spacing, Type } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 import { useApp } from '@/lib/app-state';
@@ -39,180 +44,131 @@ export default function HomeScreen() {
   const joined = channels.filter((c) => c.kind === 'channel');
 
   return (
-    <View style={{ flex: 1, backgroundColor: t.bg }}>
-      <ScrollView
-        contentContainerStyle={{ padding: Spacing.lg, paddingBottom: insets.bottom + 140 }}
-        keyboardShouldPersistTaps="handled">
-        <StatusBanner status={status} />
-
-        {publicChannel && (
-          <>
-            <SectionHeader title="BROADCAST" />
-            <Card style={{ padding: 0, overflow: 'hidden' }}>
-              <Row
-                title="Everyone nearby"
-                subtitle={last.get('#public')?.lastText ?? 'Anyone in range can read this'}
-                onPress={() => open('#public')}
-                accessory={<Text style={[Type.caption, { color: t.red }]}>NOT PRIVATE</Text>}
-              />
-            </Card>
-          </>
-        )}
-
-        <SectionHeader
-          title="CHANNELS"
-          action="Join"
-          onAction={() => router.push('/join-channel')}
-        />
-        {joined.length === 0 ? (
-          <Card>
-            <Text style={[Type.body, { color: t.textMuted }]}>
-              A channel is a name and a passphrase. Anyone you tell the passphrase to can read it.
+    <Screen
+      contentStyle={{ paddingTop: insets.top + Spacing.sm }}
+      footer={<Button title="Add a person" onPress={() => router.push('/add')} />}>
+      <View style={styles.topBar}>
+        <Text style={[Type.label, { color: t.textMuted }]}>PROTESTCHAT</Text>
+        <Pressable
+          hitSlop={16}
+          accessibilityRole="button"
+          accessibilityLabel="Settings"
+          onPress={() => router.push('/settings')}>
+          {({ pressed }) => (
+            <Text style={[Type.label, { color: t.accent, opacity: pressed ? 0.6 : 1 }]}>
+              SETTINGS
             </Text>
-          </Card>
-        ) : (
-          <Card style={{ padding: 0, overflow: 'hidden' }}>
-            {joined.map((c, i) => (
-              <View key={c.id}>
-                {i > 0 && <Separator />}
-                <Row
-                  title={`#${c.name}`}
-                  subtitle={last.get(`#${c.id}`)?.lastText ?? 'No messages yet'}
-                  onPress={() => open(`#${c.id}`)}
-                  accessory={<Text style={[Type.caption, { color: t.amber }]}>Shared key</Text>}
-                />
-              </View>
-            ))}
-          </Card>
-        )}
+          )}
+        </Pressable>
+      </View>
 
-        <SectionHeader
-          title="GROUPS"
-          action="New"
-          onAction={() => router.push('/new-group')}
-        />
-        {groups.length === 0 ? (
-          <Card>
-            <Text style={[Type.body, { color: t.textMuted }]}>
-              A group is encrypted separately to each person you add. Only they can read it.
-            </Text>
-          </Card>
-        ) : (
-          <Card style={{ padding: 0, overflow: 'hidden' }}>
-            {groups.map((g, i) => (
-              <View key={g.id}>
-                {i > 0 && <Separator />}
-                <Row
-                  title={g.name}
-                  subtitle={
-                    last.get(`~${g.id}`)?.lastText ??
-                    `${g.members.length} ${g.members.length === 1 ? 'person' : 'people'}`
-                  }
-                  onPress={() => open(`~${g.id}`)}
-                  accessory={<Text style={[Type.caption, { color: t.green }]}>Private</Text>}
-                />
-              </View>
-            ))}
-          </Card>
-        )}
+      <StatusBanner status={status} />
 
-        <SectionHeader title="PEOPLE" />
-        {contacts.length === 0 ? (
-          <Card>
-            <Empty
-              title={ready ? 'Nobody added yet' : 'Starting up…'}
-              detail="Add someone by swapping contact codes in person. It takes about ten seconds, and it is the one step that actually protects you."
+      {publicChannel && (
+        <>
+          <SectionHeader title="Broadcast" />
+          <List>
+            <Row
+              title="Everyone nearby"
+              subtitle={last.get('#public')?.lastText ?? 'Crowd warnings only. Never names or plans.'}
+              onPress={() => open('#public')}
+              accessibilityLabel="Everyone nearby. Not private — anyone in range can read this."
+              // The tag repeats what the chat screen's red band will say. Saying
+              // it twice is cheap; discovering it after sending is not.
+              tag={<Tag tone="danger" label="Not private" />}
             />
-          </Card>
-        ) : (
-          <Card style={{ padding: 0, overflow: 'hidden' }}>
-            {contacts.map((c, i) => (
-              <View key={c.publicId}>
-                {i > 0 && <Separator />}
-                <Row
-                  title={c.name}
-                  subtitle={last.get(c.publicId)?.lastText ?? 'No messages yet'}
-                  onPress={() => open(c.publicId)}
-                  accessory={
-                    <Text style={[Type.caption, { color: c.verified ? t.green : t.amber }]}>
-                      {c.verified ? 'Verified' : 'Unverified'}
-                    </Text>
-                  }
-                />
-              </View>
-            ))}
-          </Card>
-        )}
-      </ScrollView>
+          </List>
+        </>
+      )}
 
-      <View
-        style={[
-          styles.footer,
-          {
-            paddingBottom: insets.bottom + Spacing.lg,
-            backgroundColor: t.bg,
-            borderColor: t.border,
-          },
-        ]}>
-        <Button title="Add a person" onPress={() => router.push('/add')} />
-      </View>
-    </View>
+      <SectionHeader title="Channels" action="Join" onAction={() => router.push('/join-channel')} />
+      {joined.length === 0 ? (
+        <Card>
+          <Empty
+            title="No channels yet"
+            detail="A channel is a name and a passphrase, nothing else. Anyone you tell the passphrase to can read everything in it — including what was said before they arrived."
+            action="Join a channel"
+            onAction={() => router.push('/join-channel')}
+          />
+        </Card>
+      ) : (
+        <List>
+          {joined.map((c) => (
+            <Row
+              key={c.id}
+              title={`#${c.name}`}
+              subtitle={last.get(`#${c.id}`)?.lastText ?? 'No messages yet'}
+              onPress={() => open(`#${c.id}`)}
+              tag={<Tag tone="caution" label="Shared key" />}
+            />
+          ))}
+        </List>
+      )}
+
+      <SectionHeader title="Groups" action="New" onAction={() => router.push('/new-group')} />
+      {groups.length === 0 ? (
+        <Card>
+          <Empty
+            title="No groups yet"
+            detail="A group is encrypted separately to every person you add, so only they can read it. There is no shared key to leak."
+            action="Make a group"
+            onAction={() => router.push('/new-group')}
+          />
+        </Card>
+      ) : (
+        <List>
+          {groups.map((g) => (
+            <Row
+              key={g.id}
+              title={g.name}
+              subtitle={
+                last.get(`~${g.id}`)?.lastText ??
+                `${g.members.length} ${g.members.length === 1 ? 'person' : 'people'}`
+              }
+              onPress={() => open(`~${g.id}`)}
+              tag={<Tag tone="ok" label="Private" />}
+            />
+          ))}
+        </List>
+      )}
+
+      <SectionHeader title="People" />
+      {contacts.length === 0 ? (
+        <Card>
+          <Empty
+            title={ready ? 'Nobody added yet' : 'Starting up…'}
+            detail="Stand next to someone and swap contact codes. It takes about ten seconds, and being in the same place is the whole reason it protects you — there is no server here to vouch for anyone."
+            action={ready ? 'Add a person' : undefined}
+            onAction={ready ? () => router.push('/add') : undefined}
+          />
+        </Card>
+      ) : (
+        <List>
+          {contacts.map((c) => (
+            <Row
+              key={c.publicId}
+              title={c.name}
+              subtitle={last.get(c.publicId)?.lastText ?? 'No messages yet'}
+              onPress={() => open(c.publicId)}
+              leading={<Monogram name={c.name} />}
+              accessibilityLabel={`${c.name}. ${c.verified ? 'Verified' : 'Not verified'}.`}
+              tag={
+                <Tag tone={c.verified ? 'ok' : 'caution'} label={c.verified ? 'Verified' : 'Unverified'} />
+              }
+            />
+          ))}
+        </List>
+      )}
+    </Screen>
   );
-}
-
-function SectionHeader({
-  title,
-  action,
-  onAction,
-}: {
-  title: string;
-  action?: string;
-  onAction?: () => void;
-}) {
-  const t = useTheme();
-  return (
-    <View style={styles.sectionHeader}>
-      <Text style={[Type.label, { color: t.textMuted }]}>{title}</Text>
-      <View style={{ flexDirection: 'row', gap: Spacing.lg }}>
-        {action && onAction && (
-          <Pressable hitSlop={12} onPress={onAction} accessibilityRole="button">
-            <Text style={[Type.label, { color: t.blue }]}>{action}</Text>
-          </Pressable>
-        )}
-        {title === 'BROADCAST' && (
-          <Link href="/settings" asChild>
-            <Pressable hitSlop={12} accessibilityRole="button" accessibilityLabel="Settings">
-              <Text style={[Type.label, { color: t.blue }]}>Settings</Text>
-            </Pressable>
-          </Link>
-        )}
-      </View>
-    </View>
-  );
-}
-
-function Separator() {
-  const t = useTheme();
-  return <View style={[styles.sep, { backgroundColor: t.border }]} />;
 }
 
 const styles = StyleSheet.create({
-  sectionHeader: {
+  topBar: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    marginTop: Spacing.xl,
-    marginBottom: Spacing.sm,
     paddingHorizontal: Spacing.xs,
-  },
-  sep: { height: StyleSheet.hairlineWidth, marginLeft: Spacing.lg },
-  footer: {
-    position: 'absolute',
-    left: 0,
-    right: 0,
-    bottom: 0,
-    paddingHorizontal: Spacing.lg,
-    paddingTop: Spacing.md,
-    borderTopWidth: StyleSheet.hairlineWidth,
+    paddingBottom: Spacing.lg,
   },
 });

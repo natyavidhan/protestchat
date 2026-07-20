@@ -22,7 +22,7 @@ import { fromBase64, fromUtf8, toBase64, toUtf8 } from './bytes';
 // loaded and tested off-device.
 import type { Identity, OpenedMessage, PublicIdentity } from './crypto-core';
 import { open, openWithKey, randomId, seal, sealToKey } from './crypto-core';
-import type { Envelope } from './protocol';
+import type { Envelope, MessageBody } from './protocol';
 import {
   DEFAULTS,
   EnvelopeType,
@@ -219,7 +219,9 @@ export class MeshEngine {
    * Returns as soon as the envelope is durably stored, NOT when it is
    * delivered — with store-and-forward, delivery may be minutes away and may
    * happen via someone else's phone entirely. The UI reflects this: a message
-   * is "queued" until a receipt comes back.
+   * is "queued" until there is somebody to hand it to, "sent" once there was,
+   * and only "delivered" when the recipient's own acknowledgement finds its way
+   * back to us — which may itself take a relay and an hour.
    */
   async sendText(recipient: PublicIdentity, text: string): Promise<string> {
     if (!this.identity) throw new Error('mesh not started');
@@ -330,7 +332,10 @@ export class MeshEngine {
    *     would turn every listener into a signed, identified reply.
    */
   private packBody(text: string, messageId?: string): Uint8Array {
-    return pad(toUtf8(encodeBody({ kind: 'text', text, sentAt: Date.now(), ...(messageId ? { id: messageId } : {}) })));
+    const body: MessageBody = messageId
+      ? { kind: 'text', text, sentAt: Date.now(), id: messageId }
+      : { kind: 'text', text, sentAt: Date.now() };
+    return pad(toUtf8(encodeBody(body)));
   }
 
   /**
@@ -474,11 +479,16 @@ export class MeshEngine {
         if (hit.conversationId === null && parsed.id) {
           await this.sendReceipt(hit.opened.sender, parsed.id);
         }
-      } else if (parsed?.kind === 'receipt') {
+      } else if (parsed?.kind === 'receipt' && hit.conversationId === null) {
         // A receipt is not itself acked. `packBody` is the only thing that ever
         // sets a message id, and it is only ever called for text, so a receipt
         // carries nothing to reply to and this branch never sends — which is
         // what stops two phones acking each other's acks forever.
+        //
+        // Direct hits only. We never seal an ack to a channel key, so a receipt
+        // arriving through a channel is a member trying to acknowledge on a
+        // path we did not offer; the ledger would refuse it anyway, and there
+        // is no reason to run it.
         await this.applyReceipt(hit.opened.sender.publicId, parsed.messageId);
       }
 

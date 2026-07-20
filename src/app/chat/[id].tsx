@@ -1,33 +1,29 @@
 /**
  * A conversation — direct, group, channel, or public broadcast.
  *
- * The mode strip at the top is the most important element on this screen and is
- * never dismissible, never collapsible, and never quieter for the less private
- * modes. Someone typing a location into public broadcast because it looked like
- * a normal chat is the worst thing this app can do to a person.
+ * The mode notice at the top is the most important element on this screen and
+ * is never dismissible, never collapsible, and never quieter for the less
+ * private modes. Someone typing a location into public broadcast because it
+ * looked like a normal chat is the worst thing this app can do to a person.
  *
- * For the same reason the composer placeholder changes per mode: the last thing
- * you read before typing should tell you who is about to read it.
+ * For the same reason the composer placeholder names, per mode, exactly who is
+ * about to read what you type. It is the last thing on the screen before the
+ * keyboard and therefore the last thing read before typing — which makes it the
+ * cheapest place in the whole app to stop that mistake.
  */
 
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import {
-  FlatList,
-  KeyboardAvoidingView,
-  Platform,
-  Pressable,
-  StyleSheet,
-  Text,
-  View,
-} from 'react-native';
+import { FlatList, KeyboardAvoidingView, Platform, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { MessageBubble, groupsWithPrevious } from '@/components/message-bubble';
+import { ModeNotice } from '@/components/mode-notice';
 import { Button, Empty, Input } from '@/components/ui';
-import { Radius, Spacing, Type } from '@/constants/theme';
+import { Spacing, Type } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 import { useApp } from '@/lib/app-state';
-import { describeConversation } from '@/lib/conversation';
+import { describeConversation, type ConversationInfo } from '@/lib/conversation';
 import * as db from '@/lib/db';
 
 export default function ChatScreen() {
@@ -39,6 +35,9 @@ export default function ChatScreen() {
 
   const { contacts, conversations, channels, groups, sendText, status } = useApp();
   const contact = contacts.find((c) => c.publicId === conversationId);
+  const group = conversationId.startsWith('~')
+    ? groups.find((g) => g.id === conversationId.slice(1))
+    : undefined;
 
   const info = useMemo(
     () =>
@@ -94,15 +93,7 @@ export default function ChatScreen() {
     }
   };
 
-  const stripColor =
-    info.tone === 'danger' ? t.red : info.tone === 'caution' ? t.amber : t.green;
-
-  const placeholder =
-    info.mode === 'public'
-      ? 'Anyone nearby will read this'
-      : info.mode === 'channel'
-        ? 'Anyone with the passphrase will read this'
-        : 'Message';
+  const danger = info.mode === 'public';
 
   return (
     <KeyboardAvoidingView
@@ -111,131 +102,147 @@ export default function ChatScreen() {
       keyboardVerticalOffset={insets.top + 44}>
       <Stack.Screen options={{ title: info.title }} />
 
-      <Pressable
-        // Only the direct-message warning leads anywhere: verification is the
-        // one warning a user can actually act on.
+      <ModeNotice
+        info={info}
+        // Only the unverified-direct warning leads anywhere: verification is the
+        // one warning a user can actually act on from here.
         onPress={
           info.mode === 'direct' && !contact?.verified
             ? () => router.push(`/verify/${encodeURIComponent(conversationId)}`)
             : undefined
         }
-        style={[styles.strip, { backgroundColor: t.surface, borderColor: stripColor }]}>
-        <Text style={[Type.caption, { color: stripColor }]}>{info.warning}</Text>
-      </Pressable>
+      />
 
       <FlatList
         ref={listRef}
         data={messages}
         keyExtractor={(m) => m.id}
-        contentContainerStyle={{ padding: Spacing.lg, gap: Spacing.sm, flexGrow: 1 }}
+        contentContainerStyle={[
+          styles.list,
+          // Messages settle to the bottom like a conversation should; an empty
+          // conversation centres its explanation instead of stranding it above
+          // the keyboard.
+          messages.length ? styles.listFilled : styles.listEmpty,
+        ]}
         onContentSizeChange={() => listRef.current?.scrollToEnd({ animated: true })}
+        keyboardDismissMode="interactive"
         ListEmptyComponent={
           <Empty
-            title="No messages yet"
+            title={emptyTitle(info)}
             detail={
               status.connected.length > 0
-                ? 'You are connected. Say something.'
-                : 'Messages you send now will wait on your phone and go out as soon as someone is in range.'
+                ? 'You are connected to someone right now, so anything you send goes out immediately.'
+                : 'Nothing is in range yet. Messages you send now wait on your phone and go out the moment someone is — including if you simply walk somewhere else.'
             }
           />
         }
-        renderItem={({ item }) => (
-          <Bubble
-            message={item}
-            senderName={info.showSenders && !item.outgoing ? nameFor(item.senderId) : null}
-          />
-        )}
+        renderItem={({ item, index }) => {
+          const joined = groupsWithPrevious(item, messages[index - 1]);
+          const last = !groupsWithPrevious(messages[index + 1], item);
+          return (
+            <MessageBubble
+              message={item}
+              joined={joined}
+              last={last}
+              senderName={
+                info.showSenders && !item.outgoing && !joined ? nameFor(item.senderId) : null
+              }
+            />
+          );
+        }}
       />
 
       {error && (
-        <Text style={[Type.caption, { color: t.red, paddingHorizontal: Spacing.lg }]}>{error}</Text>
+        <Text
+          accessibilityRole="alert"
+          style={[
+            Type.caption,
+            { color: t.tone.danger.fg, paddingHorizontal: Spacing.lg, paddingBottom: Spacing.sm },
+          ]}>
+          {error}
+        </Text>
       )}
 
       <View
         style={[
           styles.composer,
           {
-            borderColor: t.border,
             backgroundColor: t.bg,
             paddingBottom: insets.bottom || Spacing.lg,
+            // In public broadcast the rule above the keyboard is red too. By the
+            // time the keyboard is up the warning band has scrolled out of the
+            // user's attention even though it is still on screen, and this is
+            // the one moment where being reminded still changes the outcome.
+            borderTopColor: danger ? t.tone.danger.fill : t.border,
+            borderTopWidth: danger ? 2 : StyleSheet.hairlineWidth,
           },
         ]}>
         <Input
           value={draft}
           onChangeText={setDraft}
-          placeholder={placeholder}
+          placeholder={placeholderFor(info, group?.members.length ?? 0, contact?.name)}
           multiline
-          style={{ flex: 1, maxHeight: 120 }}
+          style={{ flex: 1, maxHeight: 132 }}
         />
-        <Button title="Send" onPress={onSend} disabled={!draft.trim() || sending} />
+        <Button
+          title="Send"
+          onPress={onSend}
+          disabled={!draft.trim() || sending}
+          style={{ paddingHorizontal: Spacing.lg }}
+        />
       </View>
     </KeyboardAvoidingView>
   );
 }
 
-function Bubble({ message, senderName }: { message: db.Message; senderName: string | null }) {
-  const t = useTheme();
-  const mine = message.outgoing;
+/**
+ * Who is about to read this. Never the word "Message" — a neutral placeholder
+ * is exactly the affordance that makes a broadcast feel like a private chat.
+ */
+function placeholderFor(info: ConversationInfo, memberCount: number, contactName?: string): string {
+  switch (info.mode) {
+    case 'public':
+      return 'Everyone nearby will read this';
+    case 'channel':
+      return 'Anyone with the passphrase will read this';
+    case 'group':
+      return memberCount === 1
+        ? 'Only the 1 person you added will read this'
+        : `Only the ${memberCount} people you added will read this`;
+    case 'direct':
+      return info.tone === 'ok'
+        ? `Only ${contactName ?? 'this person'} will read this`
+        : 'Only whoever holds this code will read this — not verified';
+  }
+}
 
-  // "Queued" is not a failure and must not look like one — with
-  // store-and-forward it is the normal state of a message that is on its way.
-  const stateLabel =
-    message.state === 'queued'
-      ? 'Waiting for someone in range'
-      : message.state === 'sent'
-        ? 'Sent'
-        : message.state === 'delivered'
-          ? 'Delivered'
-          : 'Failed';
-
-  return (
-    <View style={{ alignItems: mine ? 'flex-end' : 'flex-start' }}>
-      {!!senderName && (
-        <Text style={[Type.caption, { color: t.textFaint, marginLeft: Spacing.sm }]}>
-          {senderName}
-        </Text>
-      )}
-      <View
-        style={[
-          styles.bubble,
-          {
-            backgroundColor: mine ? t.bubbleOut : t.bubbleIn,
-            borderBottomRightRadius: mine ? Radius.sm : Radius.lg,
-            borderBottomLeftRadius: mine ? Radius.lg : Radius.sm,
-          },
-        ]}>
-        <Text style={[Type.body, { color: mine ? '#FFFFFF' : t.text }]}>{message.text}</Text>
-      </View>
-      {mine && (
-        <Text style={[Type.caption, { color: message.state === 'failed' ? t.red : t.textFaint }]}>
-          {stateLabel}
-        </Text>
-      )}
-    </View>
-  );
+function emptyTitle(info: ConversationInfo): string {
+  switch (info.mode) {
+    case 'public':
+      return 'Nothing broadcast yet';
+    case 'channel':
+      return 'Nothing in this channel yet';
+    case 'group':
+      return 'Nothing in this group yet';
+    case 'direct':
+      return 'No messages yet';
+  }
 }
 
 const styles = StyleSheet.create({
-  strip: {
-    margin: Spacing.lg,
-    marginBottom: 0,
-    padding: Spacing.md,
-    borderRadius: Radius.md,
-    borderWidth: 1,
-  },
-  bubble: {
-    maxWidth: '82%',
+  list: {
     paddingHorizontal: Spacing.lg,
-    paddingVertical: Spacing.md,
-    borderTopLeftRadius: Radius.lg,
-    borderTopRightRadius: Radius.lg,
+    paddingTop: Spacing.sm,
+    paddingBottom: Spacing.lg,
+    flexGrow: 1,
   },
+  listFilled: { justifyContent: 'flex-end' },
+  listEmpty: { justifyContent: 'center' },
   composer: {
     flexDirection: 'row',
     alignItems: 'flex-end',
     gap: Spacing.sm,
     paddingHorizontal: Spacing.lg,
     paddingTop: Spacing.md,
-    borderTopWidth: StyleSheet.hairlineWidth,
   },
 });

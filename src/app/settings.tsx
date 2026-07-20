@@ -1,20 +1,32 @@
 /**
  * Settings, and the honest-limitations notice.
  *
- * That notice is not boilerplate and should not be moved, shortened, or hidden
- * behind a link. People make decisions about their physical safety based on
- * whether they believe this app works. They are entitled to know exactly what
- * it does not do, in the app, before they need it.
+ * That notice is not boilerplate and should not be moved, shortened, collapsed,
+ * or hidden behind a link. People make decisions about their physical safety
+ * based on whether they believe this app works. They are entitled to know
+ * exactly what it does not do, in the app, before they need it.
+ *
+ * It is deliberately the largest block on this screen and set at reading size
+ * rather than fine-print size. Small grey text at the bottom of a settings
+ * screen is the universal visual grammar for "nobody is expected to read this",
+ * and this is the one thing here that everybody should.
  */
 
 import { Stack } from 'expo-router';
 import { useState } from 'react';
-import { Alert, ScrollView, StyleSheet, Switch, Text, View } from 'react-native';
+import { Alert, StyleSheet, Switch, Text, View } from 'react-native';
 
-import { Button, Card, Input } from '@/components/ui';
-import { Spacing, Type } from '@/constants/theme';
+import { Bullets, Button, Card, Field, Input, Notice, Screen, Tag } from '@/components/ui';
+import { Spacing, TAP_TARGET, Type } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 import { useApp } from '@/lib/app-state';
+
+const LIMITATIONS = [
+  'Your phone being taken while unlocked. Anyone holding it reads everything.',
+  'Being physically located. Bluetooth is a radio; anyone with the right equipment can tell that a phone here is transmitting, even though they cannot read it.',
+  'Someone standing next to you reading your screen.',
+  'A contact you never verified in person turning out to be someone else.',
+];
 
 export default function SettingsScreen() {
   const t = useTheme();
@@ -32,70 +44,84 @@ export default function SettingsScreen() {
     );
 
   return (
-    <ScrollView
-      style={{ backgroundColor: t.bg }}
-      contentContainerStyle={{ padding: Spacing.lg, gap: Spacing.lg }}
-      keyboardShouldPersistTaps="handled">
+    <Screen contentStyle={{ gap: Spacing.xl }}>
       <Stack.Screen options={{ title: 'Settings' }} />
 
-      <Card style={{ gap: Spacing.md }}>
-        <Text style={[Type.label, { color: t.textMuted }]}>NAME OTHERS SEE NEARBY</Text>
-        <Input value={name} onChangeText={setName} placeholder="anon" maxLength={32} />
-        <Text style={[Type.caption, { color: t.textFaint }]}>
-          This is broadcast in the clear to every phone in range. Do not use your real name.
-        </Text>
+      <Card style={{ gap: Spacing.lg }}>
+        <Field
+          label="Name others see nearby"
+          hint="This is broadcast in the clear to every phone in range, contact or not. Do not use your real name.">
+          <Input value={name} onChangeText={setName} placeholder="anon" maxLength={32} />
+        </Field>
         <Button
           title="Save"
+          variant="secondary"
           onPress={() => void setDisplayName(name)}
           disabled={name.trim() === displayName}
         />
       </Card>
 
-      <Card style={{ gap: Spacing.md }}>
-        <View style={styles.row}>
-          <View style={{ flex: 1 }}>
-            <Text style={[Type.bodyStrong, { color: t.text }]}>Mesh radio</Text>
-            <Text style={[Type.caption, { color: t.textMuted }]}>
-              {status.running ? 'On — reachable and relaying' : 'Off — nothing in or out'}
+      <Card>
+        <View style={styles.switchRow}>
+          <View style={{ flex: 1, gap: Spacing.xs }}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: Spacing.md }}>
+              <Text style={[Type.bodyStrong, { color: t.text }]}>Mesh radio</Text>
+              {/* The word, not just the switch position: a switch read at a
+                  glance in bright sun is two grey rectangles. */}
+              <Tag tone={status.running ? 'ok' : 'danger'} label={status.running ? 'On' : 'Off'} />
+            </View>
+            <Text style={[Type.callout, { color: t.textMuted }]}>
+              {status.running
+                ? 'Reachable, and relaying sealed messages for people you will never meet.'
+                : 'Nothing in, nothing out. You are also not relaying for anyone else.'}
             </Text>
           </View>
           <Switch
             value={status.running}
             onValueChange={(on) => void (on ? startRadio() : stopRadio())}
+            accessibilityLabel="Mesh radio"
           />
         </View>
       </Card>
 
-      <Card style={{ gap: Spacing.md, borderColor: t.red }}>
-        <Text style={[Type.bodyStrong, { color: t.red }]}>Panic wipe</Text>
-        <Text style={[Type.caption, { color: t.textMuted }]}>
-          Erases everything on this phone immediately and gives you a fresh identity.
+      <Notice tone="danger" title="Panic wipe">
+        <Text style={[Type.callout, { color: t.text }]}>
+          Erases every message, contact and key on this phone immediately, and gives you a fresh
+          identity. There is no undo and no backup.
         </Text>
-        <Button title="Delete everything" variant="danger" onPress={confirmWipe} />
-      </Card>
+        <Button
+          title="Delete everything"
+          variant="danger"
+          onPress={confirmWipe}
+          style={{ marginTop: Spacing.sm }}
+        />
+      </Notice>
 
-      <Card style={{ gap: Spacing.sm }}>
-        <Text style={[Type.bodyStrong, { color: t.text }]}>What this does not protect you from</Text>
-        {[
-          'Your phone being taken while unlocked. Anyone holding it reads everything.',
-          'Being physically located. Bluetooth is a radio; anyone with the right equipment can tell that a phone here is transmitting, even though they cannot read it.',
-          'Someone standing next to you reading your screen.',
-          'A contact you never verified in person turning out to be someone else.',
-        ].map((line) => (
-          <Text key={line} style={[Type.caption, { color: t.textMuted }]}>
-            •  {line}
-          </Text>
-        ))}
-        <Text style={[Type.caption, { color: t.textFaint, marginTop: Spacing.sm }]}>
-          This software has not yet been independently audited. Treat it as useful, not as
-          guaranteed. If your safety depends on it, assume a determined state adversary can still
-          learn that you were present and transmitting.
+      <View style={[styles.honest, { borderColor: t.border }]}>
+        <Text accessibilityRole="header" style={[Type.title, { color: t.text }]}>
+          What this does not protect you from
         </Text>
-      </Card>
-    </ScrollView>
+        <Bullets items={LIMITATIONS} />
+        <Text style={[Type.callout, { color: t.textMuted }]}>
+          This software has not been independently audited. Treat it as useful, not as guaranteed.
+          If your safety depends on it, assume a determined state adversary can still learn that
+          you were present and transmitting.
+        </Text>
+      </View>
+    </Screen>
   );
 }
 
 const styles = StyleSheet.create({
-  row: { flexDirection: 'row', alignItems: 'center', gap: Spacing.md },
+  switchRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.lg,
+    minHeight: TAP_TARGET - Spacing.lg,
+  },
+  honest: {
+    gap: Spacing.lg,
+    paddingTop: Spacing.xl,
+    borderTopWidth: StyleSheet.hairlineWidth,
+  },
 });

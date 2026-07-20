@@ -4,16 +4,26 @@
  * Key derivation is intentionally slow, so this screen shows real progress
  * rather than appearing frozen. The delay is a feature and is explained, not
  * apologised for.
+ *
+ * The three-line warning below the form is not fine print. A channel is the
+ * only mode here whose confidentiality depends on something a human chose under
+ * pressure, and "gate4 / delhi" shouted across a crowd is the realistic case.
  */
 
 import { useRouter } from 'expo-router';
 import { useState } from 'react';
-import { ActivityIndicator, ScrollView, Text, View } from 'react-native';
+import { ActivityIndicator, Text, View } from 'react-native';
 
-import { Button, Card, Input } from '@/components/ui';
+import { Bullets, Button, Card, Field, Input, Notice, Screen } from '@/components/ui';
 import { Spacing, Type } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 import { useApp } from '@/lib/app-state';
+
+const CAVEATS = [
+  'Anyone with the passphrase reads everything, including messages sent before they joined.',
+  'You cannot remove anyone. There is no owner and no admin — if the passphrase leaks, the channel is finished and you start a new one with a new passphrase.',
+  'A short passphrase like “delhi” can be guessed later by someone who recorded the Bluetooth traffic tonight. Use several unrelated words.',
+];
 
 export default function JoinChannelScreen() {
   const t = useTheme();
@@ -41,56 +51,53 @@ export default function JoinChannelScreen() {
   };
 
   return (
-    <ScrollView
-      style={{ backgroundColor: t.bg }}
-      contentContainerStyle={{ padding: Spacing.lg, gap: Spacing.lg }}
-      keyboardShouldPersistTaps="handled">
-      <Card style={{ gap: Spacing.md }}>
-        <Text style={[Type.label, { color: t.textMuted }]}>CHANNEL NAME</Text>
-        <Input value={name} onChangeText={setName} placeholder="gate4" autoFocus />
-
-        <Text style={[Type.label, { color: t.textMuted, marginTop: Spacing.sm }]}>PASSPHRASE</Text>
-        <Input
-          value={passphrase}
-          onChangeText={setPassphrase}
-          placeholder="Shared secret"
-          secureTextEntry
-        />
-        <Text style={[Type.caption, { color: t.textFaint }]}>
-          Everyone who wants to read this channel types the same two things. There is no invite and
-          no owner — the passphrase is the only thing that grants access.
+    <Screen contentStyle={{ gap: Spacing.xl }}>
+      <View style={{ gap: Spacing.sm }}>
+        <Text style={[Type.hero, { color: t.text }]}>Join a channel</Text>
+        <Text style={[Type.body, { color: t.textMuted }]}>
+          Everyone who wants to read this types the same two things. There is no invite and no
+          owner — the passphrase is the only thing that grants access.
         </Text>
+      </View>
 
-        {!!error && <Text style={[Type.caption, { color: t.red }]}>{error}</Text>}
+      <Card style={{ gap: Spacing.lg }}>
+        <Field label="Channel name">
+          <Input value={name} onChangeText={setName} placeholder="gate4" autoFocus />
+        </Field>
+
+        <Field label="Passphrase">
+          <Input
+            value={passphrase}
+            onChangeText={setPassphrase}
+            placeholder="Several unrelated words"
+            secureTextEntry
+          />
+        </Field>
+
+        {!!error && (
+          <Text accessibilityRole="alert" style={[Type.callout, { color: t.tone.danger.fg }]}>
+            {error}
+          </Text>
+        )}
 
         {busy ? (
-          <View style={{ alignItems: 'center', gap: Spacing.sm, paddingVertical: Spacing.md }}>
-            <ActivityIndicator color={t.blue} />
-            <Text style={[Type.caption, { color: t.textMuted }]}>
-              Scrambling the passphrase… this takes a moment on purpose.
+          <View
+            accessibilityRole="progressbar"
+            style={{ alignItems: 'center', gap: Spacing.md, paddingVertical: Spacing.lg }}>
+            <ActivityIndicator color={t.accent} />
+            <Text style={[Type.callout, { color: t.textMuted, textAlign: 'center' }]}>
+              Scrambling the passphrase. This is slow on purpose — the same slowness is what makes
+              it expensive to guess.
             </Text>
           </View>
         ) : (
-          <Button
-            title="Join channel"
-            onPress={onJoin}
-            disabled={!name.trim() || !passphrase}
-          />
+          <Button title="Join channel" onPress={onJoin} disabled={!name.trim() || !passphrase} />
         )}
       </Card>
 
-      <Card style={{ gap: Spacing.sm, borderColor: t.amber }}>
-        <Text style={[Type.bodyStrong, { color: t.amber }]}>Before you use this</Text>
-        {[
-          'Anyone with the passphrase reads everything, including messages sent before they joined.',
-          'You cannot remove someone. If the passphrase leaks, the channel is finished — start a new one with a new passphrase.',
-          'A short passphrase like "delhi" can be guessed by someone who recorded the Bluetooth traffic. Use several unrelated words.',
-        ].map((line) => (
-          <Text key={line} style={[Type.caption, { color: t.textMuted }]}>
-            •  {line}
-          </Text>
-        ))}
-      </Card>
-    </ScrollView>
+      <Notice tone="caution" title="Before you use this">
+        <Bullets items={CAVEATS} color={t.text} />
+      </Notice>
+    </Screen>
   );
 }

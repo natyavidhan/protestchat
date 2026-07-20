@@ -183,4 +183,8 @@ Security findings get published with credit. We would much rather hear it from y
 
 ## Licence
 
-AGPL-3.0. Security software that protesters are asked to trust has to be readable by the people being asked to trust it.
+MIT. Use it, fork it, ship it, build it into something better — no permission needed and no strings attached.
+
+The point is that this gets into as many hands as possible. Anyone should be able to take this, rename it, and hand it to people in a shutdown without asking anyone.
+
+One consequence worth stating plainly, since this is security software: MIT permits closed-source forks, so a modified build could ship without its source. **Only trust a build you compiled yourself, or one from a source you have reason to trust.** That is true of any app, and reproducible builds — still on the open-problems list — are what would let you verify it rather than take it on faith.

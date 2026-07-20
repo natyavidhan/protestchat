@@ -5,13 +5,17 @@
  * synchronised roster — two members can disagree about who is in the group.
  * That is a real limitation of fan-out and the screen says so rather than
  * pretending otherwise.
+ *
+ * The unverified-member warning appears the instant one is selected, above the
+ * create button rather than after it. A warning that arrives once the group
+ * exists is a warning about something you have already done.
  */
 
 import { useRouter } from 'expo-router';
 import { useState } from 'react';
-import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
 
-import { Button, Card, Input } from '@/components/ui';
+import { Button, Card, Empty, Field, Input, Notice, Screen, Tag } from '@/components/ui';
 import { Radius, Spacing, TAP_TARGET, Type } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 import { useApp } from '@/lib/app-state';
@@ -48,80 +52,110 @@ export default function NewGroupScreen() {
   ).length;
 
   return (
-    <ScrollView
-      style={{ backgroundColor: t.bg }}
-      contentContainerStyle={{ padding: Spacing.lg, gap: Spacing.lg }}
-      keyboardShouldPersistTaps="handled">
-      <Card style={{ gap: Spacing.md }}>
-        <Text style={[Type.label, { color: t.textMuted }]}>GROUP NAME</Text>
-        <Input value={name} onChangeText={setName} placeholder="Legal support" autoFocus />
+    <Screen
+      contentStyle={{ gap: Spacing.xl }}
+      footer={
+        <Button
+          title={`Create group with ${selected.length} ${selected.length === 1 ? 'person' : 'people'}`}
+          onPress={() => void onCreate()}
+          disabled={selected.length === 0}
+        />
+      }>
+      <View style={{ gap: Spacing.sm }}>
+        <Text style={[Type.hero, { color: t.text }]}>New group</Text>
+        <Text style={[Type.body, { color: t.textMuted }]}>
+          Each message is sealed separately for every member, so there is no shared key to leak —
+          and a group of ten sends ten copies over the radio.
+        </Text>
+      </View>
+
+      <Card>
+        <Field label="Group name">
+          <Input value={name} onChangeText={setName} placeholder="Legal support" autoFocus />
+        </Field>
       </Card>
 
-      <Card style={{ gap: Spacing.md }}>
+      <View style={{ gap: Spacing.md }}>
         <Text style={[Type.label, { color: t.textMuted }]}>
-          MEMBERS ({selected.length}/{MAX_GROUP_MEMBERS})
+          MEMBERS · {selected.length} OF {MAX_GROUP_MEMBERS}
         </Text>
 
         {contacts.length === 0 ? (
-          <Text style={[Type.body, { color: t.textMuted }]}>
-            Add some people first — a group can only contain contacts you have already swapped codes
-            with.
-          </Text>
+          <Card>
+            <Empty
+              title="No contacts yet"
+              detail="A group can only contain people you have already swapped codes with in person. Add someone first."
+            />
+          </Card>
         ) : (
-          contacts.map((c) => {
-            const on = selected.includes(c.publicId);
-            return (
-              <Pressable
-                key={c.publicId}
-                onPress={() => toggle(c.publicId)}
-                accessibilityRole="checkbox"
-                accessibilityState={{ checked: on }}
-                style={[styles.member, { borderColor: on ? t.blue : t.border }]}>
-                <View
-                  style={[
-                    styles.check,
-                    { borderColor: on ? t.blue : t.border, backgroundColor: on ? t.blue : 'transparent' },
+          <View style={{ gap: Spacing.sm }}>
+            {contacts.map((c) => {
+              const on = selected.includes(c.publicId);
+              return (
+                <Pressable
+                  key={c.publicId}
+                  onPress={() => toggle(c.publicId)}
+                  accessibilityRole="checkbox"
+                  accessibilityState={{ checked: on }}
+                  accessibilityLabel={`${c.name}. ${c.verified ? 'Verified' : 'Not verified'}.`}
+                  style={({ pressed }) => [
+                    styles.member,
+                    {
+                      borderColor: on ? t.accent : t.border,
+                      backgroundColor: on ? t.surface : 'transparent',
+                      opacity: pressed ? 0.8 : 1,
+                    },
                   ]}>
-                  {on && <Text style={{ color: '#FFF', fontWeight: '700' }}>✓</Text>}
-                </View>
-                <Text style={[Type.body, { color: t.text, flex: 1 }]}>{c.name}</Text>
-                <Text style={[Type.caption, { color: c.verified ? t.green : t.amber }]}>
-                  {c.verified ? 'Verified' : 'Unverified'}
-                </Text>
-              </Pressable>
-            );
-          })
+                  <View
+                    style={[
+                      styles.check,
+                      {
+                        borderColor: on ? t.accentFill : t.borderStrong,
+                        backgroundColor: on ? t.accentFill : 'transparent',
+                      },
+                    ]}>
+                    {on && (
+                      <Text style={{ color: t.onAccentFill, fontSize: 15, fontWeight: '700' }}>
+                        ✓
+                      </Text>
+                    )}
+                  </View>
+                  <Text style={[Type.body, { color: t.text, flex: 1 }]} numberOfLines={1}>
+                    {c.name}
+                  </Text>
+                  <Tag
+                    tone={c.verified ? 'ok' : 'caution'}
+                    label={c.verified ? 'Verified' : 'Unverified'}
+                  />
+                </Pressable>
+              );
+            })}
+          </View>
         )}
 
-        {!!error && <Text style={[Type.caption, { color: t.red }]}>{error}</Text>}
-      </Card>
+        {!!error && (
+          <Text accessibilityRole="alert" style={[Type.callout, { color: t.tone.danger.fg }]}>
+            {error}
+          </Text>
+        )}
+      </View>
 
       {unverifiedSelected > 0 && (
-        <Card style={{ borderColor: t.amber, gap: Spacing.sm }}>
-          <Text style={[Type.bodyStrong, { color: t.amber }]}>
-            {unverifiedSelected} unverified {unverifiedSelected === 1 ? 'member' : 'members'}
+        <Notice
+          tone="caution"
+          title={`${unverifiedSelected} unverified ${unverifiedSelected === 1 ? 'member' : 'members'}`}>
+          <Text style={[Type.callout, { color: t.text }]}>
+            You have not compared safety numbers with everyone here. If any of those codes came
+            from someone impersonating them, that person reads this group.
           </Text>
-          <Text style={[Type.caption, { color: t.textMuted }]}>
-            You have not checked safety numbers with everyone here. If any of those codes came from
-            someone impersonating them, that person reads this group.
-          </Text>
-        </Card>
+        </Notice>
       )}
 
-      <Card style={{ gap: Spacing.sm }}>
-        <Text style={[Type.caption, { color: t.textFaint }]}>
-          Each message is encrypted separately for every member, so a group of ten sends ten copies
-          over the radio. Membership is stored only on your phone — other members see the messages,
-          not the member list, and their idea of who is in the group may differ from yours.
-        </Text>
-      </Card>
-
-      <Button
-        title={`Create group with ${selected.length} ${selected.length === 1 ? 'person' : 'people'}`}
-        onPress={onCreate}
-        disabled={selected.length === 0}
-      />
-    </ScrollView>
+      <Text style={[Type.caption, { color: t.textMuted }]}>
+        Membership is stored only on your phone. Other members see the messages, not the member
+        list, and their idea of who is in this group may differ from yours.
+      </Text>
+    </Screen>
   );
 }
 
@@ -131,14 +165,14 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: Spacing.md,
-    paddingHorizontal: Spacing.md,
+    paddingHorizontal: Spacing.lg,
     borderRadius: Radius.md,
     borderWidth: 1,
   },
   check: {
     width: 24,
     height: 24,
-    borderRadius: 6,
+    borderRadius: Radius.sm - 2,
     borderWidth: 2,
     alignItems: 'center',
     justifyContent: 'center',
