@@ -68,3 +68,6 @@ Pods/
 # Test and coverage output
 coverage/
 *.log
+
+# Local iOS signing (personal Apple team id — never commit)
+signing.local.json

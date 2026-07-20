@@ -23,8 +23,16 @@ import type { Message } from '@/lib/db';
 /** Messages closer together than this from one sender are drawn as one block. */
 const GROUP_WINDOW_MS = 4 * 60 * 1000;
 
-export function groupsWithPrevious(m: Message, previous: Message | undefined): boolean {
-  if (!previous) return false;
+export function groupsWithPrevious(
+  m: Message | undefined,
+  previous: Message | undefined,
+): boolean {
+  // Both ends are guarded because the chat screen calls this in both
+  // directions: once with the previous message to decide grouping, and once
+  // with the NEXT message (which is undefined for the last row) to decide
+  // whether this is the tail of a block. An undefined on either side simply
+  // means "no neighbour there", which is never a group.
+  if (!m || !previous) return false;
   if (previous.outgoing !== m.outgoing) return false;
   if (previous.senderId !== m.senderId) return false;
   return m.sentAt - previous.sentAt < GROUP_WINDOW_MS;

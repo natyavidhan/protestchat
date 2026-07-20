@@ -75,7 +75,8 @@
             "minSdkVersion": 24
           }
         }
-      ]
+      ],
+      "./plugins/withDevelopmentTeam"
     ],
     "experiments": {
       "typedRoutes": true,
