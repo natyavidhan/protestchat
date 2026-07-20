@@ -11,7 +11,7 @@ Built after Delhi Police deployed portable cellular jammers at Jantar Mantar on 
 │  UI · SQLite · sealing · dedup · relay · expiry          │
 ├──────────────────────────┬───────────────────────────────┤
 │  Swift (iOS)             │  Kotlin (Android)             │
-│  Nearby Connections      │  Nearby Connections           │
+│  CoreBluetooth           │  BLE GATT                     │
 └──────────────────────────┴───────────────────────────────┘
               BLE / Wi-Fi Direct — no tower, no ISP
 ```
@@ -45,7 +45,7 @@ src/lib/
   db.ts             SQLite: messages, contacts, channels, groups, envelope cache
   store.ts          MeshStore interface — lets the engine run against memory in tests
   mesh.ts           the engine — sealing, dedup, store-and-forward, relay
-  transport.ts      radio abstraction (Nearby today, LoRa/gateway later)
+  transport.ts      radio abstraction (our BLE GATT today, LoRa/gateway later)
   conversation.ts   derives the mode and its warning, in ONE place
   app-state.tsx     React bindings
 src/app/            home, chat/[id], add, verify/[id], join-channel, new-group, settings
@@ -82,13 +82,16 @@ The first native build takes several minutes. After that JavaScript hot-reloads;
 | **Android** | Builds. Kotlin module compiles against `play-services-nearby`. |
 | **iOS** | **Blocked.** See below. |
 
-**iOS is blocked on a real upstream gap:** Google ships Nearby Connections for iOS via Swift Package Manager only, with [no CocoaPods support](https://github.com/google/nearby/issues/1685) — an open request since May 2023, explicitly filed because React Native and Flutter plugin systems depend on CocoaPods. `pod install` therefore fails with `Unable to find a specification for NearbyConnections`.
+### Why we do not use Google Nearby Connections
 
-This is not a version typo and cannot be fixed by changing the podspec version. Options, in order of preference:
+The obvious choice for cross-platform device-to-device is Google's Nearby Connections. We built on it first and then removed it, for two independent reasons:
 
-1. **`spm_dependency` in the podspec.** Expo's autolinking understands SPM dependencies declared from a local module. Least invasive; try this first.
-2. **A config plugin that injects the SPM package** into the generated Xcode project, so `prebuild` does not wipe it.
-3. **Write our own BLE transport** with CoreBluetooth on iOS and BLE GATT on Android, dropping Nearby entirely. Most work, no dependency on Google shipping anything, and full control of the advertising identifiers we currently cannot rotate. This is roughly what Bridgefy and BitChat do.
+1. **On iOS it only ever brings up the Wi-Fi LAN medium** — both phones must already be joined to the same Wi-Fi network. In a jammed square with no infrastructure that is not a degraded path, it is no path at all. Google lists iOS BLE as "in development."
+2. **It ships for iOS via Swift Package Manager only**, with [no CocoaPods support](https://github.com/google/nearby/issues/1685) — an open request since May 2023, filed precisely because React Native and Flutter plugin systems depend on CocoaPods.
+
+So even solving the packaging would have produced an iPhone that cannot reach an Android phone at a protest. We now own the radio outright in `modules/ble-mesh/`: CoreBluetooth on iOS, BLE GATT on Android, no third-party dependency on either side.
+
+The migration is an upgrade rather than a workaround. Nearby gave us no control over the advertising identifier, and a stable BLE identifier is a tracking beacon — open problem #2 in the threat model. Owning the advertisement is the only way to rotate it, which we now do every 15 minutes from fresh CSPRNG bytes, with no name or key material advertised at all.
 
 ### Permissions
 
@@ -109,17 +112,17 @@ This is not a version typo and cannot be fixed by changing the podspec version. 
 | App installs and launches | yes | `npm run android` / `npm run ios` |
 | **The radio actually finding a peer** | **no** | two physical phones, by hand |
 
-**The mesh cannot be tested in a simulator or emulator.** Neither has a real Bluetooth radio — Nearby will initialise and then discover nothing, forever. There is no emulator trick for this. Everything below needs two phones in the same room.
+**The mesh cannot be tested in a simulator or emulator.** Neither has a real Bluetooth radio — the transport will initialise and then discover nothing, forever. There is no emulator trick for this. Everything below needs two phones in the same room.
 
 ### The manual part
 
 The whole point is one thing working, so test exactly that first.
 
-**Setup.** Install the build on two phones (one iPhone and one Android is the interesting case). Grant Bluetooth, Location and Nearby-devices permissions on Android; Bluetooth and Local Network on iOS. Keep the app in the **foreground** on both — background BLE is an unsolved problem, see the threat model.
+**Setup.** Install the build on two phones (one iPhone and one Android is the interesting case). Grant the Bluetooth permissions on Android (and Location on Android 11 and below); Bluetooth on iOS. Keep the app in the **foreground** on both — background BLE is an unsolved problem, see the threat model.
 
 **1. Cut the network for real.**
 
-Airplane mode on both phones, then manually turn Bluetooth back on (and Wi-Fi, which Nearby uses for its fast path — just do not join a network). Confirm you genuinely have no connectivity: open a browser, load anything, watch it fail.
+Airplane mode on both phones, then manually turn Bluetooth back on. Wi-Fi can stay off entirely — this transport is BLE only. Confirm you genuinely have no connectivity: open a browser, load anything, watch it fail.
 
 **2. Introduce the two phones.**
 
@@ -175,7 +178,7 @@ The channel test worth doing deliberately: join `gate4` on two phones with the s
 Most useful right now, in order:
 
 1. Applied cryptographers — the lack of forward secrecy is the top open question
-2. Anyone who has shipped cross-platform Nearby Connections
+2. Anyone who has shipped cross-platform BLE GATT — especially iOS peripheral role and Android OEM quirks
 3. Anyone who has been in a shutdown or jammed protest — what would you actually have used?
 4. Anyone who wants to co-write the threat model
 

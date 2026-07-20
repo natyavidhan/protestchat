@@ -4,10 +4,11 @@
  * The mesh engine talks to this, never to the native module directly. Two
  * reasons, both of which matter more than the indirection costs:
  *
- *   1. The radio is going to change. BLE/Wi-Fi Direct via Nearby is v1; LoRa,
+ *   1. The radio is going to change. Our own BLE GATT transport is v1; LoRa,
  *      Wi-Fi Aware, or an internet gateway for peers who have walked out of the
- *      jammed zone all plug in behind this same interface.
- *   2. Nearby is unavailable in Expo Go and on web. Without a stub, the whole
+ *      jammed zone all plug in behind this same interface. Google Nearby was
+ *      v0 and was removed — see getTransport() for why.
+ *   2. No native radio exists in Expo Go or on web. Without a stub, the whole
  *      app becomes untestable except on a custom dev build wired to a phone.
  */
 
@@ -54,70 +55,6 @@ class Emitter {
         console.warn(`[transport] listener for "${event}" threw:`, err);
       }
     }
-  }
-}
-
-// ---------------------------------------------------------------------------
-// Nearby-backed transport
-// ---------------------------------------------------------------------------
-
-class NearbyTransport implements Transport {
-  readonly available = true;
-  private emitter = new Emitter();
-  private subscriptions: { remove(): void }[] = [];
-  private running = false;
-
-  constructor(private native: any) {}
-
-  on = <K extends keyof TransportEvents>(e: K, h: TransportEvents[K]) => this.emitter.on(e, h);
-  emit = <K extends keyof TransportEvents>(e: K, ...a: Parameters<TransportEvents[K]>) =>
-    this.emitter.emit(e, ...a);
-
-  async start(serviceId: string, displayName: string): Promise<void> {
-    if (this.running) return;
-    this.running = true;
-
-    const n = this.native;
-    this.subscriptions = [
-      n.addPeerFoundListener((p: Peer) => this.emit('peerFound', p)),
-      n.addPeerLostListener((p: { id: string }) => this.emit('peerLost', p.id)),
-      n.addConnectedListener((p: Peer) => this.emit('connected', p)),
-      n.addDisconnectedListener((p: { id: string }) => this.emit('disconnected', p.id)),
-      n.addPayloadListener((p: { peerId: string; payloadBase64: string }) =>
-        this.emit('payload', p.peerId, p.payloadBase64),
-      ),
-      n.addErrorListener((p: { message: string }) => this.emit('error', p.message)),
-
-      // Connections are accepted unconditionally and immediately. This looks
-      // alarming and is not: the mesh is a public medium by construction, a
-      // relay cannot prompt a human for every stranger it forwards through, and
-      // refusing connections would only shrink the network without protecting
-      // anything. Confidentiality and authenticity come from the sealed payload
-      // (see crypto.ts), never from who we agreed to shake hands with.
-      n.addConnectionInitiatedListener((p: { id: string }) => {
-        n.acceptConnection(p.id).catch((err: unknown) =>
-          this.emit('error', `accept failed: ${String(err)}`),
-        );
-      }),
-    ];
-
-    await n.setDisplayName(displayName);
-    // Advertise and discover simultaneously: every device is both an endpoint
-    // and a relay, so there is no "host" role to elect.
-    await n.startAdvertising(serviceId);
-    await n.startDiscovery(serviceId);
-  }
-
-  async stop(): Promise<void> {
-    if (!this.running) return;
-    this.running = false;
-    for (const s of this.subscriptions) s.remove();
-    this.subscriptions = [];
-    await this.native.stopAll();
-  }
-
-  send(peerId: string, payloadBase64: string): Promise<void> {
-    return this.native.send(peerId, payloadBase64);
   }
 }
 
@@ -276,23 +213,17 @@ function loadModule(load: () => any): any | null {
 export function getTransport(): Transport {
   if (cached) return cached;
 
-  // ble-mesh first. It is the only one of the two that works on iOS without
-  // shared Wi-Fi, and the only one whose advertising identifier we control well
-  // enough to rotate. nearby-mesh stays as the fallback until ble-mesh has been
-  // proven on two physical phones, at which point it goes away entirely.
+  // ble-mesh or nothing. nearby-mesh has been deleted: Nearby on iOS only ever
+  // brings up the Wi-Fi LAN medium, which is no path at all in a jammed square
+  // with no infrastructure, and it gave us no control over the advertising
+  // identifier. Keeping it as a fallback also meant two native modules
+  // declaring conflicting ACCESS_FINE_LOCATION bounds, which broke the Android
+  // manifest merge outright.
   // eslint-disable-next-line @typescript-eslint/no-require-imports
   const ble = loadModule(() => require('../../modules/ble-mesh'));
-  if (ble && typeof ble.startAdvertising === 'function' && typeof ble.startScanning === 'function') {
-    cached = new BleTransport(ble);
-    return cached;
-  }
-
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
-  const nearby = loadModule(() => require('../../modules/nearby-mesh'));
-  const native = nearby?.default ?? nearby;
   cached =
-    native && typeof native.startAdvertising === 'function'
-      ? new NearbyTransport(native)
+    ble && typeof ble.startAdvertising === 'function' && typeof ble.startScanning === 'function'
+      ? new BleTransport(ble)
       : new UnavailableTransport();
 
   return cached;

@@ -11,7 +11,7 @@ Modules under `modules/` are autolinked by Expo automatically — nothing to ins
 
 ## Why this exists
 
-`modules/nearby-mesh` is left in place for now and will be deleted once this is
+`modules/nearby-mesh` has been deleted; this is the only transport.
 proven on two physical phones. Two reasons it has to go:
 
 1. **Nearby on iOS only supports the Wi-Fi LAN medium.** Both phones must already
