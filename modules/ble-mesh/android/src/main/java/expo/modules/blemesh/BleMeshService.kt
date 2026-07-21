@@ -3,7 +3,6 @@ package expo.modules.blemesh
 import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
-import android.app.Notification
 import android.app.PendingIntent
 import android.app.Service
 import android.content.Context
@@ -20,6 +19,12 @@ import android.os.IBinder
  * BleMeshModule does — it only creates a persistent notification so the OS
  * knows the process is doing user-visible work. The module starts it when
  * advertising or scanning begins and stops it in teardown().
+ *
+ * The notification is deliberately discreet: it does not appear on the lock
+ * screen and it does not describe what the app is doing, because a visible
+ * lock-screen tell would defeat the purpose of a privacy-first mesh app. The
+ * OS still shows the app label in the notification shade (unavoidable), but
+ * that is only visible to someone who already has the unlocked phone.
  */
 class BleMeshService : Service() {
 
@@ -28,10 +33,10 @@ class BleMeshService : Service() {
     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
       val channel = NotificationChannel(
         CHANNEL_ID,
-        "Mesh relay",
+        "Bluetooth background use",
         NotificationManager.IMPORTANCE_LOW
       ).apply {
-        description = "Keeps protestchat relaying messages while the app is in the background."
+        description = "Used while the app is backgrounded."
       }
       val notificationManager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
       notificationManager.createNotificationChannel(channel)
@@ -53,14 +58,21 @@ class BleMeshService : Service() {
     }
 
     builder
-      .setContentTitle("protestchat relay active")
-      .setContentText("Relaying sealed messages for nearby phones in the background.")
+      .setContentTitle("Bluetooth active")
+      .setContentText("Running in the background.")
       .setSmallIcon(android.R.drawable.stat_sys_data_bluetooth)
       .setOngoing(true)
       .setWhen(System.currentTimeMillis())
 
     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
       builder.setCategory(Notification.CATEGORY_SERVICE)
+    }
+
+    // Never show this notification on the lock screen. A persistent, self-
+    // describing lock-screen tell would be more damaging than the benefit of
+    // background relaying.
+    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
+      builder.setVisibility(Notification.VISIBILITY_SECRET)
     }
 
     // Tapping the notification returns the user to the app rather than doing nothing.

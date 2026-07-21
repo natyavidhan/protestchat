@@ -184,7 +184,7 @@ export const en = {
   'settings.name': 'Your name',
   'settings.nameHint': 'Stays on this phone. It is never broadcast — nearby devices see only a rotating random code, never this name — and it is shown to you, not to them.',
   'settings.meshRadio': 'Mesh radio',
-  'settings.radioOnDetail': 'Reachable while this screen is open. Background relaying is best-effort: iOS and Android may pause Bluetooth when the app is not in the foreground, so keep protestchat open for reliable relay.',
+  'settings.radioOnDetail': 'Reachable while this screen is open. Background relaying is best-effort: iOS and Android may pause Bluetooth when the app is not in the foreground, so keep protestchat open for reliable relay. On Android, the radio shows a persistent notification while the app is backgrounded.',
   'settings.radioOffDetail': 'Nothing in, nothing out. You are also not relaying for anyone else.',
   'settings.panicWipe': 'Panic wipe',
   'settings.panicDetail': 'Erases every message, contact and key on this phone immediately, and gives you a fresh identity. There is no undo and no backup.',
