@@ -79,6 +79,12 @@ export class MeshEngine {
   private carrying = 0;
   private running = false;
   private lastError: string | null = null;
+  /**
+   * When false, ingest is a no-op. Cleared by `dropSecrets()` during panic wipe
+   * so a wedged `transport.stop()` cannot leave us filing into a wiped DB (#55).
+   * Restored by `start()`.
+   */
+  private admitting = true;
 
   /**
    * Channel keys we can currently open, including the public broadcast key.
@@ -181,6 +187,7 @@ export class MeshEngine {
     this.identity = identity;
     this.displayName = displayName;
     this.running = true;
+    this.admitting = true;
     this.lastError = null;
 
     this.unsubscribes = [
@@ -242,6 +249,23 @@ export class MeshEngine {
     this.emit();
   }
 
+  /**
+   * Drop every in-memory secret and refuse further ingress immediately.
+   *
+   * Panic wipe calls this *before* erasing the DB and *before* `stop()`, because
+   * `transport.stop()` can hang on a wedged BLE stack. Without this, sealed
+   * traffic arriving in that window can be opened and written into a freshly
+   * wiped database (#55). Does not touch the radio — call `stop()` for that.
+   */
+  dropSecrets(): void {
+    this.admitting = false;
+    this.identity = null;
+    this.channelKeys = [];
+    this.localPrekeys = new LocalPrekeys();
+    this.peerPrekeys = new PeerPrekeyBook();
+    this.emit();
+  }
+
   async stop(): Promise<void> {
     if (!this.running) return;
     this.running = false;
@@ -251,15 +275,9 @@ export class MeshEngine {
     this.unsubscribes = [];
     this.peers.clear();
     this.connected.clear();
-    // Drop the in-memory secrets. panic wipe calls stop() before erasing disk;
-    // clearing these here means a wiped app is not still holding the identity
-    // and channel keys in a live field. JS cannot zero the backing memory, so
-    // this drops the references for GC rather than promising secure erasure —
-    // the seized-unlocked-phone case remains out of scope (see threat model).
-    this.identity = null;
-    this.channelKeys = [];
-    this.localPrekeys = new LocalPrekeys();
-    this.peerPrekeys = new PeerPrekeyBook();
+    // Secrets first (sync), then the radio — which may hang. panicWipe also
+    // calls dropSecrets() earlier so a hang here is not a secret-retention bug.
+    this.dropSecrets();
     await this.transport.stop();
     this.emit();
   }
@@ -491,6 +509,9 @@ export class MeshEngine {
     // between injection and transmission.
     await this.store.storeEnvelope(envelope, true);
     await this.store.markSeen(toBase64(envelope.id));
+    // Record the opaque ciphertext so a re-wrap of this payload cannot re-enter
+    // our carry cache with a reset hop/TTL if it comes back via a peer (#54).
+    await this.store.markMessageSeen(sealedPayloadKey(sealed));
     await this.refreshCarrying();
 
     if (delayMs > 0) await new Promise((r) => setTimeout(r, delayMs));
@@ -517,6 +538,10 @@ export class MeshEngine {
   // -------------------------------------------------------------------------
 
   private async ingest(fromPeerId: string, payloadBase64: string): Promise<void> {
+    // panicWipe sets admitting=false via dropSecrets() before the DB wipe and
+    // before awaiting transport.stop(); refuse everything once wipe starts (#55).
+    if (!this.admitting) return;
+
     const envelope = decodeEnvelope(fromBase64(payloadBase64));
     // Malformed input from a stranger's radio is expected. Drop it silently;
     // do not let a parse failure become a crash or a log that fingerprints us.
@@ -535,6 +560,14 @@ export class MeshEngine {
 
   private async handleSealed(fromPeerId: string, envelope: Envelope): Promise<void> {
     const idB64 = toBase64(envelope.id);
+
+    // Opaque ciphertext admit-once. Envelope-id dedup alone is defeated by
+    // re-wrapping the same sealed payload under a fresh id with hopCount=0 and
+    // a new createdAt — that resets epidemic hop budget and the first-sight
+    // retention lease. Content-hash dedup (#3) stops duplicate *delivery* after
+    // open; this gate stops relays from storing/forwarding the re-wrap at all (#54).
+    // Prefixed so it does not collide with decrypted content hashes below.
+    if (!(await this.store.markMessageSeen(sealedPayloadKey(envelope.payload)))) return;
 
     // Dedup before anything expensive. In a dense crowd the same envelope
     // arrives from many directions and trial decryption is not free.
@@ -816,6 +849,11 @@ export class MeshEngine {
 }
 
 // ---------------------------------------------------------------------------
+
+/** Ledger key for opaque sealed ciphertext; prefix avoids colliding with content hashes. */
+function sealedPayloadKey(payload: Uint8Array): string {
+  return `payload:${toBase64(sha256(payload))}`;
+}
 
 function parseIdList(payload: Uint8Array): string[] | null {
   try {
